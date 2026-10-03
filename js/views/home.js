@@ -4,10 +4,10 @@ import { formatRM } from '../money.js';
 import { todayMY, monthKey } from '../dates.js';
 import {
   cashInFund, availableCents, avgMonthlySpend, runway, contributionsInMonth,
-  pendingClaims, dueSoon, backupReminderDays,
+  pendingClaims, dueSoon, backupReminderDays, paidAhead,
 } from '../calc.js';
 import { buildSummary, summaryText, drawSummaryImage } from '../summary.js';
-import { esc, shortDate } from '../ui.js';
+import { esc, shortDate, monthLabel } from '../ui.js';
 
 export function render(el) {
   const today = todayMY();
@@ -21,6 +21,7 @@ export function render(el) {
   const due = dueSoon(state.upcoming, today);
   const claims = pendingClaims(txns);
   const backupDays = backupReminderDays(settings, state.me);
+  const ahead = paidAhead(txns, state.members, today);
 
   el.innerHTML = `
     ${backupDays != null ? `
@@ -50,12 +51,14 @@ export function render(el) {
     </div>
 
     <div class="card">
-      <h3>This month</h3>
+      <h3>This month <span class="muted small">(${monthLabel(monthKey(today))})</span></h3>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
         ${contribs.map(c => c.total_cents > 0
           ? `<span class="chip ok">✓ ${esc(c.name)} ${formatRM(c.total_cents)}</span>`
           : `<span class="chip">${esc(c.name)} · not yet</span>`).join('')}
       </div>
+      ${ahead.length ? `<p class="muted small" style="margin:10px 0 0">Paid ahead: ${ahead
+        .map(a => `${esc(a.name)} (${monthLabel(a.month).slice(0, 3)})`).join(', ')}</p>` : ''}
     </div>
 
     ${claims.length ? `
@@ -91,6 +94,7 @@ export function render(el) {
       a.href = URL.createObjectURL(blob);
       a.download = file.name;
       a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
       toast('Image downloaded');
     }
   });

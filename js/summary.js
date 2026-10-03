@@ -11,6 +11,10 @@ const LABEL = 10;   // label column width
 const AMOUNT = 14;  // right-aligned amount column width
 
 const trunc = (s, n) => ([...s].length > n ? [...s].slice(0, n - 1).join('') + '…' : s);
+// Pad by code points (what the 30-char limit counts), so emoji don't shift the columns.
+const padEnd = (s, n) => s + ' '.repeat(Math.max(0, n - [...s].length));
+const padStart = (s, n) => ' '.repeat(Math.max(0, n - [...s].length)) + s;
+const WIDTH = 30;
 const nameOf = (list, id, fallback) => list.find(x => x.id === id)?.name ?? fallback;
 
 export function buildSummary({ txns, members, pets, categories, upcoming, settings, today }) {
@@ -46,13 +50,16 @@ export function buildSummary({ txns, members, pets, categories, upcoming, settin
 }
 
 function row(label, cents) {
-  return `${trunc(label, LABEL).padEnd(LABEL)} ${formatRM(cents).padStart(AMOUNT)}`;
+  let amount = formatRM(cents);
+  // Only reachable above RM 1 billion: drop the sen so the line stays within WIDTH.
+  if ([...amount].length > WIDTH - LABEL - 1) amount = amount.replace(/\.\d\d$/, '');
+  return `${padEnd(trunc(label, LABEL), LABEL)} ${padStart(amount, AMOUNT)}`;
 }
 
 function runwayText(s) {
   const value = s.runway == null ? '—' : `≈ ${s.runway} mo`;
   const flag = s.belowReserve ? ' ⚠' : s.reserve > 0 ? ' ✓' : '';
-  return `${'Runway'.padEnd(LABEL)} ${value}${flag}`;
+  return `${padEnd('Runway', LABEL)} ${value}${flag}`;
 }
 
 export function summaryText(s) {
@@ -61,7 +68,7 @@ export function summaryText(s) {
 
   out.push('', 'CONTRIBUTIONS');
   for (const c of s.contributions) {
-    out.push(c.total_cents > 0 ? row(c.name, c.total_cents) : `${trunc(c.name, LABEL).padEnd(LABEL)} —  not yet`);
+    out.push(c.total_cents > 0 ? row(c.name, c.total_cents) : `${padEnd(trunc(c.name, LABEL), LABEL)} —  not yet`);
   }
   out.push(row('Total', s.contribTotal));
 
@@ -77,7 +84,7 @@ export function summaryText(s) {
     out.push('', 'DUE SOON');
     for (const d of s.due) {
       const [, mm, dd] = d.date.split('-');
-      out.push(`${trunc(d.name, 18).padEnd(18)} ${dd}/${mm}${d.overdue ? ' !' : ''}`);
+      out.push(`${padEnd(trunc(d.name, 18), 18)} ${dd}/${mm}${d.overdue ? ' !' : ''}`);
     }
   }
   out.push('```');

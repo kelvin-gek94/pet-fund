@@ -2,6 +2,7 @@ import { test, assertEqual, assertDeep } from './harness.js';
 import {
   cashInFund, pendingClaims, availableCents, spendInMonth, avgMonthlySpend, runway,
   contributionsInMonth, dueSoon, nextDueAfterPaid, spendBy, inOutByMonth, backupReminderDays,
+  paidAhead, forMonthOptions, defaultForMonth,
 } from '../js/calc.js';
 
 const members = ['Kelvin', 'Vincent', 'Desmond', 'Jolyn', 'Dickson']
@@ -96,4 +97,41 @@ test('backupReminderDays: only Kelvin, null or > 7 days', () => {
   assertEqual(backupReminderDays({ last_backup_at: '2026-10-02T12:00:00Z' }, kelvin, now), 8);
   assertEqual(backupReminderDays({ last_backup_at: '2026-10-04T12:00:00Z' }, kelvin, now), null);
   assertEqual(backupReminderDays({ last_backup_at: null }, { name: 'Jolyn' }, now), null);
+});
+
+test('runway: no spending yet but below reserve shows 0, not —', () => {
+  assertDeep(runway(5000, 20000, 0), { months: 0, belowReserve: true });
+});
+
+// ── For month (paying early / late) ──
+const early = [
+  { ...base, id: 'e1', type: 'contribution', date: '2026-10-05', amount_cents: 20000, member_id: 'kelvin', for_month: '2026-10-01' },
+  { ...base, id: 'e2', type: 'contribution', date: '2026-10-15', amount_cents: 15000, member_id: 'vincent', for_month: '2026-11-01' },
+  { ...base, id: 'e3', type: 'contribution', date: '2026-10-02', amount_cents: 10000, member_id: 'jolyn', for_month: '2026-09-01' },
+  { ...base, id: 'e4', type: 'contribution', date: '2026-10-03', amount_cents: 5000, member_id: 'dickson' }, // no for_month (older app)
+];
+
+test('contributionsInMonth follows for_month, falling back to the transfer month', () => {
+  assertDeep(contributionsInMonth(early, members, '2026-10').map(c => [c.name, c.total_cents]),
+    [['Kelvin', 20000], ['Vincent', 0], ['Desmond', 0], ['Jolyn', 0], ['Dickson', 5000]]);
+  assertEqual(contributionsInMonth(early, members, '2026-11').find(c => c.name === 'Vincent').total_cents, 15000);
+  assertEqual(contributionsInMonth(early, members, '2026-09').find(c => c.name === 'Jolyn').total_cents, 10000);
+});
+
+test('cash still counts early payments on the transfer date', () => assertEqual(cashInFund(early, 0), 50000));
+
+test('paidAhead lists contributions for future months', () => {
+  assertDeep(paidAhead(early, members, '2026-10-20'), [{ member_id: 'vincent', name: 'Vincent', month: '2026-11', total_cents: 15000 }]);
+});
+
+test('forMonthOptions: last month, this month, next two', () => {
+  assertDeep(forMonthOptions('2026-12-20'), ['2026-11', '2026-12', '2027-01', '2027-02']);
+});
+
+test('defaultForMonth: this month, or the next unpaid month', () => {
+  assertEqual(defaultForMonth(early, 'desmond', '2026-10-20'), '2026-10');
+  assertEqual(defaultForMonth(early, 'kelvin', '2026-10-20'), '2026-11');
+  assertEqual(defaultForMonth(early, 'vincent', '2026-10-20'), '2026-10');
+  const both = [...early, { ...base, id: 'e5', type: 'contribution', date: '2026-10-21', amount_cents: 100, member_id: 'kelvin', for_month: '2026-11-01' }];
+  assertEqual(defaultForMonth(both, 'kelvin', '2026-10-21'), '2026-12');
 });

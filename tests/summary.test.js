@@ -57,3 +57,15 @@ test('long names and big amounts stay ≤ 30 chars', () => {
   for (const l of lines(big)) assert([...l].length <= 30, `too long: "${l}"`);
   assert(summaryText(big).includes('Prescript…'), 'truncated name');
 });
+
+test('emoji in a name keeps the amount column aligned', () => {
+  const s = buildSummary({ ...fixture, categories: [{ id: 'vet', name: 'Vet 🐶', active: true }, categories[1]] });
+  const vetLine = summaryText(s).split('\n').find(l => l.startsWith('Vet 🐶'));
+  const kelvinLine = summaryText(s).split('\n').find(l => l.startsWith('Kelvin'));
+  assertEqual([...vetLine].length, [...kelvinLine].length, 'same visible width');
+});
+
+test('amounts of RM 1 billion+ still fit in 30 chars', () => {
+  const s = buildSummary({ ...fixture, settings: { opening_balance_cents: -123456789012, reserve_target_cents: 0 } });
+  for (const l of summaryText(s).split('\n')) assert([...l].length <= 30, `too long: "${l}"`);
+});

@@ -3,12 +3,16 @@ import { state, refresh, navigate, toast, nameOf } from '../app.js';
 import * as db from '../db.js';
 import { formatRM, sumCents } from '../money.js';
 import { todayMY, monthKey } from '../dates.js';
-import { esc, options, openSheet, shortDate } from '../ui.js';
+import { esc, options, openSheet, shortDate, monthLabel } from '../ui.js';
+import { fundMonth } from '../calc.js';
 
 const filters = { month: null, type: '', pet: '', category: '', person: '', deleted: false };
 
 function label(t) {
-  if (t.type === 'contribution') return `${nameOf('members', t.member_id)} · contribution`;
+  if (t.type === 'contribution') {
+    const forOther = fundMonth(t) !== monthKey(t.date) ? ` · for ${monthLabel(fundMonth(t))}` : '';
+    return `${nameOf('members', t.member_id)} · contribution${forOther}`;
+  }
   const pet = t.pet_id ? nameOf('pets', t.pet_id) : 'All pets';
   return [nameOf('categories', t.category_id), pet, t.paid_to].filter(Boolean).join(' · ');
 }
@@ -122,7 +126,9 @@ export function render(el) {
     on('receipt', async () => {
       const win = window.open('', '_blank');   // open synchronously so phones don't block the popup
       try {
-        win.location = await db.receiptUrl(t.receipt_path);
+        const url = await db.receiptUrl(t.receipt_path);
+        if (win) win.location = url;
+        else location.href = url;              // pop-ups blocked: open in this tab instead
       } catch (ex) {
         win?.close();
         toast(`Couldn't open receipt: ${ex.message}`);

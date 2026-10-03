@@ -34,3 +34,9 @@ export function choices(list, currentId) {
   const cur = list.find(x => x.id === currentId && !x.active);
   return cur ? [...out, { ...cur, name: `${cur.name} (hidden)` }] : out;
 }
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export function monthLabel(month) {
+  const [y, m] = month.split('-');
+  return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+}

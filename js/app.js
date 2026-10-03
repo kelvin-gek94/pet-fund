@@ -54,22 +54,27 @@ async function render() {
   window.scrollTo(0, 0);
 }
 
+const NOT_AUTHORISED = 'Not authorised — this app is private to the family. Ask Kelvin to add your Google email.';
+let notAuthorised = false;   // keeps the message on screen after the automatic sign-out
+
 function showLogin(message = '') {
   $('app').hidden = true;
   $('login').hidden = false;
-  $('login-msg').textContent = message;
+  $('login-msg').textContent = message || (notAuthorised ? NOT_AUTHORISED : '');
 }
 
 async function start(session) {
   state.session = session;
   if (!session) return showLogin();
+  notAuthorised = false;
   try {
     await refresh();
   } catch (err) {
     return showLogin(`Couldn't load data: ${err.message}`);
   }
   if (!state.me) {
-    showLogin('Not authorised — this app is private to the family.');
+    notAuthorised = true;
+    showLogin();
     setTimeout(() => db.signOut(), 4000);
     return;
   }

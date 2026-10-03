@@ -40,6 +40,7 @@ export async function runBackup() {
     a.href = URL.createObjectURL(blob);
     a.download = filename;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     await db.saveSettings({ last_backup_at: new Date().toISOString(), last_backup_by: state.me.id });
     await refresh();
     toast(failed.length

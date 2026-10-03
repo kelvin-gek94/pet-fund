@@ -3,9 +3,9 @@ import { state, refresh, navigate, toast } from '../app.js';
 import * as db from '../db.js';
 import { parseAmount, fromCents } from '../money.js';
 import { todayMY } from '../dates.js';
-import { nextDueAfterPaid } from '../calc.js';
+import { nextDueAfterPaid, fundMonth, defaultForMonth, forMonthOptions } from '../calc.js';
 import { resizeImage } from '../image.js';
-import { esc, options, choices } from '../ui.js';
+import { esc, options, choices, monthLabel } from '../ui.js';
 
 export function render(el, params) {
   const existing = params.id ? state.txns.find(t => t.id === params.id) : null;
@@ -42,6 +42,11 @@ export function render(el, params) {
       <div class="field" data-for="contribution">
         <label for="f-member">From</label>
         <select id="f-member">${options(choices(state.members, t.member_id), t.member_id ?? state.me.id)}</select>
+      </div>
+      <div class="field" data-for="contribution">
+        <label for="f-formonth">For month</label>
+        <select id="f-formonth"></select>
+        <p class="muted small">Paying early or late? Pick the month this money is for.</p>
       </div>
       <div data-for="expense">
         <div class="field">
@@ -88,6 +93,19 @@ export function render(el, params) {
   el.querySelectorAll('.segmented button').forEach(b => b.addEventListener('click', () => setType(b.dataset.type)));
   setType(type);
 
+  // "For month": editing keeps the stored month; a new entry suggests the sibling's next unpaid month.
+  let forMonthTouched = !!existing;
+  function fillForMonth() {
+    const today = todayMY();
+    const current = existing?.type === 'contribution' ? fundMonth(existing) : defaultForMonth(state.txns, $('#f-member').value, today);
+    const months = [...new Set([...forMonthOptions(today), current])].sort();
+    $('#f-formonth').innerHTML = months
+      .map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${monthLabel(m)}</option>`).join('');
+  }
+  fillForMonth();
+  $('#f-formonth').addEventListener('change', () => { forMonthTouched = true; });
+  $('#f-member').addEventListener('change', () => { if (!forMonthTouched) fillForMonth(); });
+
   const claimHint = () => { $('[data-claim-hint]').hidden = !$('#f-paidby').value; };
   $('#f-paidby').addEventListener('change', claimHint);
   claimHint();
@@ -96,7 +114,9 @@ export function render(el, params) {
     const box = $('[data-receipt]');
     if (receiptBlob) {
       box.innerHTML = `<img class="receipt-preview" alt="Receipt preview"><button type="button" class="link-btn small">Remove photo</button>`;
-      box.querySelector('img').src = URL.createObjectURL(receiptBlob);
+      const img = box.querySelector('img');
+      img.src = URL.createObjectURL(receiptBlob);
+      img.onload = () => URL.revokeObjectURL(img.src);
     } else if (t.receipt_path && !receiptRemoved) {
       box.innerHTML = `<p class="small"><a target="_blank" rel="noopener">View current receipt</a> · <button type="button" class="link-btn small">Remove</button></p>`;
       db.receiptUrl(t.receipt_path).then(url => { box.querySelector('a').href = url; }).catch(() => {});
@@ -143,6 +163,7 @@ export function render(el, params) {
       date: $('#f-date').value || todayMY(),
       amount_cents,
       member_id: isExpense ? null : $('#f-member').value,
+      for_month: isExpense ? null : `${$('#f-formonth').value}-01`,
       category_id: isExpense ? $('#f-category').value : null,
       pet_id: isExpense ? ($('#f-pet').value || null) : null,
       paid_to: isExpense ? ($('#f-paidto').value.trim() || null) : null,

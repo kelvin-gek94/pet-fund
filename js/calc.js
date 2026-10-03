@@ -49,13 +49,16 @@ export function avgMonthlySpend(txns, today) {
 
 export function runway(availableCents, reserveCents, avgCents) {
   const belowReserve = availableCents < reserveCents;
-  if (avgCents <= 0) return { months: null, belowReserve };
+  if (avgCents <= 0) return { months: belowReserve ? 0 : null, belowReserve };
   const months = Math.max(0, (availableCents - reserveCents) / avgCents);
   return { months: Math.round(months * 10) / 10, belowReserve };
 }
 
+// The month a contribution is "for" (siblings may pay early or late); older rows fall back to the transfer month.
+export const fundMonth = t => monthKey(t.for_month ?? t.date);
+
 export function contributionsInMonth(txns, members, month) {
-  const rows = contributions(txns).filter(t => monthKey(t.date) === month);
+  const rows = contributions(txns).filter(t => fundMonth(t) === month);
   return members.filter(m => m.active).map(m => ({
     member_id: m.id,
     name: m.name,
@@ -106,4 +109,33 @@ export function backupReminderDays(settings, me, now = new Date()) {
   if (!settings.last_backup_at) return Infinity;
   const days = Math.floor((now - new Date(settings.last_backup_at)) / 86400000);
   return days > BACKUP_EVERY_DAYS ? days : null;
+}
+
+// Contributions already received for months after the current one.
+export function paidAhead(txns, members, today) {
+  const now = monthKey(today);
+  const out = new Map();
+  for (const t of contributions(txns)) {
+    const month = fundMonth(t);
+    if (month <= now) continue;
+    const key = `${t.member_id}|${month}`;
+    const row = out.get(key)
+      ?? { member_id: t.member_id, name: members.find(m => m.id === t.member_id)?.name ?? '?', month, total_cents: 0 };
+    row.total_cents += t.amount_cents;
+    out.set(key, row);
+  }
+  return [...out.values()].sort((a, b) => a.month.localeCompare(b.month) || a.name.localeCompare(b.name));
+}
+
+// "For month" choices on the Add form: last month, this month, and the next two.
+export function forMonthOptions(today) {
+  const first = `${monthKey(today)}-01`;
+  return [-1, 0, 1, 2].map(n => monthKey(addMonthsClamped(first, n)));
+}
+
+// Default "For month": this month, unless this sibling already paid it — then the next unpaid one.
+export function defaultForMonth(txns, memberId, today) {
+  const paid = new Set(contributions(txns).filter(t => t.member_id === memberId).map(fundMonth));
+  const [, ...upcoming] = forMonthOptions(today);
+  return upcoming.find(m => !paid.has(m)) ?? upcoming.at(-1);
 }

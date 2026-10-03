@@ -2,7 +2,7 @@
 import { state, nameOf } from '../app.js';
 import { formatRM, sumCents } from '../money.js';
 import { todayMY, monthKey } from '../dates.js';
-import { spendBy, inOutByMonth } from '../calc.js';
+import { spendBy, inOutByMonth, fundMonth } from '../calc.js';
 import { esc } from '../ui.js';
 
 const view = { mode: 'month', month: null, year: null };
@@ -28,7 +28,8 @@ export function render(el) {
   view.month ??= monthKey(today);
   view.year ??= today.slice(0, 4);
   const live = state.txns.filter(t => !t.deleted_at);
-  const months = [...new Set([monthKey(today), ...live.map(t => monthKey(t.date))])].sort().reverse();
+  const months = [...new Set([monthKey(today), ...live.map(t => monthKey(t.date)),
+    ...live.filter(t => t.type === 'contribution').map(fundMonth)])].sort().reverse();
   const years = [...new Set(months.map(m => m.slice(0, 4)))];
 
   const [from, to] = view.mode === 'month'
@@ -41,10 +42,13 @@ export function render(el) {
     .sort((a, b) => b.cents - a.cents);
   const byCategory = toRows(spendBy(live, 'category_id', from, to), 'categories', 'Other');
   const byPet = toRows(spendBy(live, 'pet_id', from, to), 'pets', 'All pets');
+  // Contributions per sibling follow "For month"; Money in follows the transfer date (cash flow).
+  const [fromMonth, toMonth] = [monthKey(from), monthKey(to)];
+  const forPeriod = live.filter(t => t.type === 'contribution' && fundMonth(t) >= fromMonth && fundMonth(t) <= toMonth);
   const byMember = state.members
-    .map(m => ({ label: m.name, cents: sumCents(inRange.filter(t => t.type === 'contribution' && t.member_id === m.id).map(t => t.amount_cents)) }))
+    .map(m => ({ label: m.name, cents: sumCents(forPeriod.filter(t => t.member_id === m.id).map(t => t.amount_cents)) }))
     .filter(r => r.cents > 0);
-  const totalIn = sumCents(byMember.map(r => r.cents));
+  const totalIn = sumCents(inRange.filter(t => t.type === 'contribution').map(t => t.amount_cents));
   const totalOut = sumCents(byCategory.map(r => r.cents));
 
   // Start the trend at the first month with entries, so months before the app existed aren't listed.
@@ -70,7 +74,7 @@ export function render(el) {
     </div>
     <div class="card"><h3>Spending by category</h3>${bars(byCategory)}</div>
     <div class="card"><h3>Spending by pet</h3>${bars(byPet)}</div>
-    <div class="card"><h3>Contributions</h3>${bars(byMember, 'in')}</div>
+    <div class="card"><h3>Contributions for this period</h3>${bars(byMember, 'in')}</div>
     ${view.mode === 'year' ? `
       <div class="card"><h3>In vs out by month</h3>
         ${trend.map(r => `

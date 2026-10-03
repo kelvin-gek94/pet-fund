@@ -39,6 +39,7 @@ create table public.transactions (
   receipt_path text,
   paid_by_member_id uuid references public.members(id), -- null = paid by Fund
   reimbursed_on date,
+  for_month date,                                      -- contributions: the month it is for (1st of month)
   deleted_at timestamptz,
   created_by uuid references public.members(id),
   created_at timestamptz not null default now(),
@@ -48,7 +49,10 @@ create table public.transactions (
     member_id is not null and pet_id is null and category_id is null
     and paid_by_member_id is null and reimbursed_on is null)),
   constraint expense_shape check (type <> 'expense' or (category_id is not null and member_id is null)),
-  constraint reimbursed_only_claims check (reimbursed_on is null or paid_by_member_id is not null)
+  constraint reimbursed_only_claims check (reimbursed_on is null or paid_by_member_id is not null),
+  constraint for_month_shape check (
+    (type = 'contribution' or for_month is null)
+    and (for_month is null or extract(day from for_month) = 1))
 );
 create index transactions_date_idx on public.transactions (date);
 
@@ -93,9 +97,14 @@ language sql stable security definer set search_path = public as $$
   select public.current_member_id() is not null
 $$;
 
+revoke execute on function public.current_member_id() from public, anon;
+revoke execute on function public.is_member() from public, anon;
+grant execute on function public.current_member_id() to authenticated;
+grant execute on function public.is_member() to authenticated;
+
 -- Audit stamps come from the signed-in user, never from the browser.
 create or replace function public.stamp_audit() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql set search_path = public as $$
 begin
   if tg_op = 'INSERT' then
     new.created_by := public.current_member_id();

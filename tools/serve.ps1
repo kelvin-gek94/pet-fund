@@ -17,7 +17,7 @@ while ($listener.IsListening) {
     $rel = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath).TrimStart('/')
     if ($rel -eq '' -or $rel.EndsWith('/')) { $rel += 'index.html' }
     $path = [IO.Path]::GetFullPath((Join-Path $root $rel))
-    if ($path.StartsWith($root) -and (Test-Path $path -PathType Leaf)) {
+    if ($path.StartsWith($root + [IO.Path]::DirectorySeparatorChar) -and (Test-Path $path -PathType Leaf)) {
       $bytes = [IO.File]::ReadAllBytes($path)
       $ext = [IO.Path]::GetExtension($path).ToLower()
       $res.ContentType = if ($mime[$ext]) { $mime[$ext] } else { 'application/octet-stream' }

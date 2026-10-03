@@ -107,7 +107,7 @@ function upcomingForm(item, done) {
     const msg = !name ? 'Enter a name.'
       : amt == null ? 'Enter a valid amount.'
       : !$('#u-cat').value ? 'Choose a category.'
-      : freq === 'every_n_months' && !(n >= 1) ? 'Months must be 1 or more.'
+      : freq === 'every_n_months' && !(Number.isInteger(n) && n >= 1) ? 'Months must be a whole number, 1 or more.'
       : !$('#u-due').value ? 'Choose the next due date.' : '';
     $('[data-err]').textContent = msg;
     if (msg) return;
