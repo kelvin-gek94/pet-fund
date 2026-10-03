@@ -207,7 +207,7 @@ function renderSettings(body) {
       <button class="btn btn-block" data-backup>💾 Back up now</button>
     </div>
     ${listEditor('members', 'Family members', m => m.email ? `<br><span class="muted small">${esc(m.email)}</span>` : '<br><span class="muted small">no email — cannot sign in</span>')}
-    <p class="muted small" style="margin:-4px 0 12px">Only listed emails can sign in. New emails must also be added as Google test users.</p>
+    <p class="muted small" style="margin:-4px 0 12px">Only active members with a Google email listed here can see the fund. Untick Active to remove someone's access.</p>
     ${listEditor('pets', 'Pets')}
     ${listEditor('categories', 'Categories')}
     <button class="btn btn-block" data-signout>Sign out</button>`;

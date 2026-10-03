@@ -16,8 +16,10 @@ Keep this Pet Fund project separate from any RB Supabase project.
 1. Go to <https://console.cloud.google.com/> → project picker → **New project** → name `Pet Fund` → Create, and make sure it's selected.
 2. **APIs & Services → OAuth consent screen** (may be called **Google Auth Platform**) → Get started:
    - App name `Pet Fund`, support email = your Gmail → Audience **External** → contact email = your Gmail → Create.
-   - **Audience** → leave Publishing status on **Testing** → **Test users → + Add users** → add each family Gmail.
-     Only listed test users can sign in (a second lock on top of the database allowlist). On first sign-in Google shows
+   - **Audience** → leave Publishing status on **Testing**. Adding **Test users** is optional: in practice
+     (confirmed 2026-10-03) Google let a non-listed account sign in, because the app only asks for name + email.
+     **The members list in the app (step 3) is the real lock** — only active members with a matching email
+     see any data; everyone else gets "Not authorised" and is signed out. If Google ever shows
      "Google hasn't verified this app" → tap **Continue**; that's expected.
    - Google Cloud requires 2-Step Verification on your Google account before it lets you in.
 3. **Clients** (or **Credentials → Create credentials → OAuth client ID**) → Application type **Web application** → Name `Pet Fund web`.
