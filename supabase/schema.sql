@@ -233,3 +233,12 @@ alter table public.transactions add constraint lines_shape check (
   lines is null or (
     type = 'expense' and jsonb_typeof(lines) = 'array' and jsonb_array_length(lines) > 0
     and public.lines_total(lines) = amount));
+
+-- ───────────── Pet coats and tag colours ─────────────
+alter table public.pets add column if not exists coat text not null default 'plain';
+alter table public.pets add column if not exists color text;
+alter table public.pets drop constraint if exists pets_coat_check;
+alter table public.pets add constraint pets_coat_check
+  check (coat in ('pomeranian', 'tuxedo', 'tabby', 'bicolour', 'tricolour', 'plain'));
+alter table public.pets drop constraint if exists pets_color_check;
+alter table public.pets add constraint pets_color_check check (color is null or color ~ '^#[0-9A-Fa-f]{6}$');

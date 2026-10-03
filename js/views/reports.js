@@ -1,22 +1,13 @@
-// Reports for a month or a year: spend by category, by pet, contributions, in vs out.
+// Reports for a month or a year: what it cost, needs vs wants, per pet, per category, chip-ins, in and out.
 import { state, nameOf } from '../app.js';
 import { formatRM, sumCents } from '../money.js';
 import { todayMY, monthKey } from '../dates.js';
 import { spendBy, inOutByMonth, fundMonth, needsWants } from '../calc.js';
-import { esc } from '../ui.js';
+import { esc, monthLabel } from '../ui.js';
+import { coatSvg, coatOf, petColor } from '../pets.js';
+import { monthCostSentence } from '../words.js';
 
 const view = { mode: 'month', month: null, year: null };
-
-function bars(rows, cls = '') {
-  if (!rows.length) return '<p class="muted small">No entries yet</p>';
-  const max = Math.max(...rows.map(r => r.cents), 1);
-  return rows.map(r => `
-    <div class="bar-row">
-      <span>${esc(r.label)}</span>
-      <div class="bar ${cls}" style="width:${(r.cents / max) * 100}%"></div>
-      <span class="num small">${formatRM(r.cents)}</span>
-    </div>`).join('');
-}
 
 const lastDay = m => {
   const [y, mm] = m.split('-').map(Number);
@@ -41,7 +32,11 @@ export function render(el) {
     .map(([id, cents]) => ({ label: id == null ? nullLabel : nameOf(list, id), cents }))
     .sort((a, b) => b.cents - a.cents);
   const byCategory = toRows(spendBy(live, 'category_id', from, to), 'categories', 'Other');
-  const byPet = toRows(spendBy(live, 'pet_id', from, to), 'pets', 'All pets');
+  const petMap = spendBy(live, 'pet_id', from, to);
+  const petSpend = [...petMap].map(([id, cents]) => {
+    const pet = state.pets.find(p => p.id === id) ?? null;
+    return { pet, label: pet ? pet.name : 'All pets', cents, color: pet ? petColor(pet, state.pets) : 'var(--faint)' };
+  }).sort((a, b) => b.cents - a.cents);
   // Contributions per sibling follow "For month"; Money in follows the transfer date (cash flow).
   const [fromMonth, toMonth] = [monthKey(from), monthKey(to)];
   const forPeriod = live.filter(t => t.type === 'contribution' && fundMonth(t) >= fromMonth && fundMonth(t) <= toMonth);
@@ -58,34 +53,57 @@ export function render(el) {
   const trend = inOutByMonth(live, trendFrom, view.year === today.slice(0, 4) ? monthKey(today) : `${view.year}-12`);
   const trendMax = Math.max(...trend.map(r => Math.max(r.in_cents, r.out_cents)), 1);
 
+  const headline = view.mode === 'month' ? monthCostSentence(view.month, totalOut)
+    : totalOut > 0 ? `${view.year} cost ${formatRM(totalOut)}.` : `Nothing spent in ${view.year} yet.`;
+  const petMax = Math.max(...petSpend.map(r => r.cents), 1);
+  const amountRows = rows => (rows.length
+    ? `<ul class="rows">${rows.map(r => `<li><span class="grow">${esc(r.label)}</span><span class="end num">${formatRM(r.cents)}</span></li>`).join('')}</ul>`
+    : '<p class="muted small">Nothing yet for this period.</p>');
+
   el.innerHTML = `
-    <h2>Reports</h2>
     <div class="segmented">
       <button type="button" data-mode="month" class="${view.mode === 'month' ? 'on' : ''}">Month</button>
       <button type="button" data-mode="year" class="${view.mode === 'year' ? 'on' : ''}">Year</button>
     </div>
-    <div class="field">
+    <select id="r-period" aria-label="Period">
       ${view.mode === 'month'
-        ? `<select id="r-period">${months.map(m => `<option${m === view.month ? ' selected' : ''}>${m}</option>`).join('')}</select>`
-        : `<select id="r-period">${years.map(y => `<option${y === view.year ? ' selected' : ''}>${y}</option>`).join('')}</select>`}
-    </div>
-    <div class="card figures">
-      <div><div class="muted small">Money in</div><div class="figure num in">${formatRM(totalIn)}</div></div>
-      <div><div class="muted small">Spent</div><div class="figure num out">${formatRM(totalOut)}</div></div>
-    </div>
-    <div class="card"><h3>Spending by category</h3>${bars(byCategory)}</div>
-    <div class="card"><h3>Needs vs wants</h3>${bars([{ label: 'Needs', cents: nw.need_cents }, { label: 'Wants', cents: nw.want_cents }].filter(x => x.cents > 0))}</div>
-    <div class="card"><h3>Spending by pet</h3>${bars(byPet)}</div>
-    <div class="card"><h3>Contributions for this period</h3>${bars(byMember, 'in')}</div>
+        ? months.map(m => `<option value="${m}"${m === view.month ? ' selected' : ''}>${monthLabel(m)}</option>`).join('')
+        : years.map(y => `<option${y === view.year ? ' selected' : ''}>${y}</option>`).join('')}
+    </select>
+
+    <p class="headline">${esc(headline)}</p>
+    ${totalOut > 0 ? `
+      <p class="subline num">${formatRM(nw.need_cents)} on needs and ${formatRM(nw.want_cents)} on wants.</p>
+      <div class="split" style="margin-top:12px" aria-hidden="true">
+        <span style="flex:${nw.need_cents};background:var(--ink)"></span><span style="flex:${nw.want_cents};background:var(--brass)"></span>
+      </div>
+      <div class="row small muted"><span>Needs</span><span>Wants</span></div>` : ''}
+    <p class="subline num" style="margin-top:10px">${formatRM(totalIn)} came in.</p>
+
+    <h3>By pet</h3>
+    ${petSpend.length ? `<div class="petbars">${petSpend.map(r => `
+      ${r.pet ? coatSvg(coatOf(r.pet), 22) : coatSvg('plain', 22)}
+      <span class="small">${esc(r.label)}</span>
+      <span class="bar" style="width:${Math.max(2, (r.cents / petMax) * 100)}%;background:${r.color}"></span>
+      <span class="num small">${formatRM(r.cents)}</span>`).join('')}
+    </div>` : '<p class="muted small">Nothing yet for this period.</p>'}
+
+    <h3>By category</h3>
+    ${amountRows(byCategory)}
+
+    <h3>Chip-ins for this period</h3>
+    ${amountRows(byMember)}
+
     ${view.mode === 'year' ? `
-      <div class="card"><h3>In vs out by month</h3>
-        ${trend.map(r => `
-          <div class="small" style="margin:8px 0">
-            <div class="row"><span>${r.month}</span><span class="num"><span class="in">+${formatRM(r.in_cents)}</span> · <span class="out">−${formatRM(r.out_cents)}</span></span></div>
-            <div class="bar in" style="width:${(r.in_cents / trendMax) * 100}%;margin-top:3px"></div>
-            <div class="bar out" style="width:${(r.out_cents / trendMax) * 100}%;margin-top:3px"></div>
-          </div>`).join('')}
-      </div>` : ''}`;
+      <h3>In and out by month</h3>
+      <div class="trend">${trend.map(r => `
+        <span>${monthLabel(r.month).slice(0, 3)}</span>
+        <span class="bars" title="In ${formatRM(r.in_cents)}, out ${formatRM(r.out_cents)}">
+          <span class="bar" style="width:${(r.in_cents / trendMax) * 100}%;background:var(--leaf)"></span>
+          <span class="bar" style="width:${(r.out_cents / trendMax) * 100}%;background:var(--rust)"></span>
+        </span>`).join('')}
+      </div>
+      <p class="muted small"><span class="in">Green</span> is money in, <span class="out">red</span> is money out.</p>` : ''}`;
 
   el.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { view.mode = b.dataset.mode; render(el); }));
   el.querySelector('#r-period').addEventListener('change', e => {

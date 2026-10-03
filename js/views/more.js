@@ -1,4 +1,4 @@
-// More: Upcoming costs, Claims to reimburse, Settings.
+// More: upcoming costs, paying people back, and settings.
 import { state, refresh, navigate, toast, nameOf } from '../app.js';
 import * as db from '../db.js';
 import { formatRM, parseAmount, parseBalance, fromCents, sumCents } from '../money.js';
@@ -7,8 +7,10 @@ import { pendingClaims } from '../calc.js';
 import { APP_VERSION } from '../version.js';
 import { isAdmin } from '../roles.js';
 import { esc, options, openSheet, shortDate, choices } from '../ui.js';
+import { petTag, COATS, PET_PALETTE, petColor, coatOf } from '../pets.js';
+import { icon } from '../icons.js';
 
-const TABS = { upcoming: 'Upcoming', claims: 'Claims', settings: 'Settings' };
+const TABS = { upcoming: 'Upcoming', claims: 'Pay back', settings: 'Settings' };
 const FREQ = { monthly: 'Monthly', every_n_months: 'Every N months', yearly: 'Yearly' };
 
 export function render(el, params) {
@@ -41,7 +43,7 @@ function renderUpcoming(body) {
   const today = todayMY();
   const items = state.upcoming.filter(u => u.active);
   body.innerHTML = `
-    <button class="btn btn-primary btn-block" data-a="new">＋ Add upcoming cost</button>
+    <button class="btn btn-primary btn-block" data-a="new">${icon('plus', 18)}Add an upcoming cost</button>
     <div class="card" style="margin-top:12px">
       ${items.length ? `<ul class="list">${items.map(u => `
         <li>
@@ -51,7 +53,7 @@ function renderUpcoming(body) {
             <span class="${u.next_due < today ? 'out' : ''}">${u.next_due < today ? 'Overdue · ' : 'Due '}${shortDate(u.next_due)}</span>
           </div>
           <div class="row" style="margin-top:8px;justify-content:flex-start;gap:16px">
-            <button class="link-btn" data-pay="${u.id}">✓ Mark paid</button>
+            <button class="link-btn" data-pay="${u.id}">${icon('check', 16)} Mark paid</button>
             <button class="link-btn" data-edit="${u.id}">Edit</button>
           </div>
         </li>`).join('')}</ul>` : '<p class="muted">No upcoming costs yet. Add things like monthly food or yearly vaccinations.</p>'}
@@ -131,7 +133,7 @@ function renderClaims(body) {
     .sort((a, b) => b.reimbursed_on.localeCompare(a.reimbursed_on));
 
   body.innerHTML = `
-    ${!isAdmin(state.me) && pending.length ? '<p class="muted small">Only the admin marks claims as reimbursed, after paying you back.</p>' : ''}
+    ${!isAdmin(state.me) && pending.length ? '<p class="muted small">The admin marks these as paid back after sending the money.</p>' : ''}
     ${pending.length ? pending.map(c => {
       const items = live.filter(t => !t.reimbursed_on && t.paid_by_member_id === c.member_id);
       return `<div class="card">
@@ -140,25 +142,25 @@ function renderClaims(body) {
           <li class="row small">
             <span>${shortDate(t.date)} · ${esc(nameOf('categories', t.category_id))}${t.paid_to ? ` · ${esc(t.paid_to)}` : ''}<br>
               <span class="num">${formatRM(t.amount_cents)}</span></span>
-            ${isAdmin(state.me) ? `<button class="btn" data-one="${t.id}">Reimbursed</button>` : ''}
+            ${isAdmin(state.me) ? `<button class="btn" data-one="${t.id}">Paid back</button>` : ''}
           </li>`).join('')}</ul>
-        ${isAdmin(state.me) && items.length > 1 ? `<button class="btn btn-primary btn-block" data-all="${c.member_id}">Reimbursed all ${formatRM(c.total_cents)}</button>` : ''}
+        ${isAdmin(state.me) && items.length > 1 ? `<button class="btn btn-primary btn-block" data-all="${c.member_id}">Paid back all ${formatRM(c.total_cents)}</button>` : ''}
       </div>`;
-    }).join('') : '<div class="card muted">Nothing to reimburse. 🎉</div>'}
-    ${recent.length ? `<div class="card"><h3>Reimbursed (last 90 days)</h3><ul class="list">${recent.map(t => `
+    }).join('') : '<p class="muted">Nobody is owed anything right now.</p>'}
+    ${recent.length ? `<div class="card"><h3>Paid back in the last 90 days</h3><ul class="list">${recent.map(t => `
       <li class="row small"><span>${esc(nameOf('members', t.paid_by_member_id))} · ${shortDate(t.date)}</span>
-        <span class="num">${formatRM(t.amount_cents)} · paid ${shortDate(t.reimbursed_on)}</span></li>`).join('')}</ul></div>` : ''}`;
+        <span class="num">${formatRM(t.amount_cents)}, paid back ${shortDate(t.reimbursed_on)}</span></li>`).join('')}</ul></div>` : ''}`;
 
   const ask = (ids, total) => {
     const sheet = openSheet(`
-      <h3>Mark reimbursed</h3>
+      <h3>Mark as paid back</h3>
       <p class="muted small">${formatRM(total)} transferred back</p>
       <div class="field"><label for="c-date">Transfer date</label><input id="c-date" type="date" value="${todayMY()}" max="${todayMY()}"></div>
       <div class="btn-row"><button class="btn" data-a="cancel">Cancel</button><button class="btn btn-primary" data-a="ok">Confirm</button></div>`);
     sheet.el.querySelector('[data-a="cancel"]').addEventListener('click', sheet.close);
     sheet.el.querySelector('[data-a="ok"]').addEventListener('click', async () => {
       const date = sheet.el.querySelector('#c-date').value || todayMY();
-      if (await guarded(() => Promise.all(ids.map(id => db.markReimbursed(id, date))), 'Marked reimbursed')) {
+      if (await guarded(() => Promise.all(ids.map(id => db.markReimbursed(id, date))), 'Marked as paid back')) {
         sheet.close();
         renderClaims(body);
       }
@@ -184,7 +186,7 @@ function renderSettings(body) {
       <h3>${title}</h3>
       <ul class="list">${state[key].map(x => `
         <li class="row">
-          <span>${esc(x.name)}${x.active ? '' : ' <span class="tag">hidden</span>'}${extra(x)}</span>
+          <span>${key === 'pets' ? '' : esc(x.name)}${x.active ? '' : ' <span class="tag">hidden</span>'}${extra(x)}</span>
           ${editable ? `<button class="link-btn" data-edit="${x.id}">Edit</button>` : ''}
         </li>`).join('')}</ul>
       ${editable ? '<button class="btn btn-block" data-add>＋ Add</button>' : ''}
@@ -208,12 +210,12 @@ function renderSettings(body) {
       <h3>Backup</h3>
       <p class="muted small">Last backup: ${s.last_backup_at ? `${new Date(s.last_backup_at).toLocaleString('en-MY')} by ${esc(nameOf('members', s.last_backup_by, '?'))}` : 'never'}</p>
       <p class="muted small">Save the file into <em>PETS\\Pet Fund Backups</em>.</p>
-      <button class="btn btn-block" data-backup>💾 Back up now</button>
+      <button class="btn btn-block" data-backup>${icon('device-floppy', 18)}Back up now</button>
     </div>` : ''}
     ${listEditor('members', 'Family members', m => (m.role === 'admin' ? ' <span class="tag">admin</span>' : '')
       + (m.email ? `<br><span class="muted small">${esc(m.email)}</span>` : '<br><span class="muted small">no email — cannot sign in</span>'), admin)}
     <p class="muted small" style="margin:-4px 0 12px">Only active members with a Google email listed here can see the fund. Untick Active to remove someone's access.</p>
-    ${listEditor('pets', 'Pets')}
+    ${listEditor('pets', 'Pets', p => petTag(p, state.pets, { small: true }))}
     ${listEditor('categories', 'Categories', c => (c.kind === 'want' ? ' <span class="tag">want</span>' : ''))}
     <button class="btn btn-block" data-signout>Sign out</button>
     <p class="muted small" style="text-align:center;margin-top:12px">App version ${APP_VERSION}</p>`;
@@ -250,6 +252,7 @@ function renderSettings(body) {
 function listItemForm(key, row, save, done) {
   const isMember = key === 'members';
   const isCategory = key === 'categories';
+  const isPet = key === 'pets';
   const r = row ?? { name: '', active: true, email: null, sort: state[key].length + 1 };
   const sheet = openSheet(`
     <h3>${row ? 'Edit' : 'Add'}</h3>
@@ -260,12 +263,40 @@ function listItemForm(key, row, save, done) {
       ${isCategory ? `<div class="field"><label for="l-kind">Type</label>
         <select id="l-kind"><option value="need"${(r.kind ?? 'need') === 'need' ? ' selected' : ''}>Need (essentials: food, vet…)</option>
         <option value="want"${r.kind === 'want' ? ' selected' : ''}>Want (treats, toys…)</option></select></div>` : ''}
+      ${isPet ? `<div class="field"><label for="l-coat">Coat</label>
+        <select id="l-coat">${COATS.map(c => `<option value="${c.id}"${c.id === coatOf(r) ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select></div>
+        <div class="field"><label>Tag colour</label><div class="chips" data-swatches>
+          ${PET_PALETTE.map(c => `<button type="button" data-color="${c}" aria-label="Colour ${c}" aria-pressed="${c === petColor(r, state.pets)}"
+            style="width:34px;height:34px;border-radius:50%;background:${c};border:3px solid ${c === petColor(r, state.pets) ? 'var(--ink)' : 'transparent'};cursor:pointer"></button>`).join('')}
+        </div></div>
+        <div class="field"><label>Preview</label><div data-preview></div></div>` : ''}
       <div class="field"><label><input id="l-active" type="checkbox" style="width:auto;min-height:0"${r.active ? ' checked' : ''}> Active (shown in pickers)</label></div>
       <div class="error" data-err></div>
       <div class="btn-row"><button type="button" class="btn" data-a="cancel">Cancel</button><button class="btn btn-primary" type="submit">Save</button></div>
     </form>`);
   const $ = s => sheet.el.querySelector(s);
   $('[data-a="cancel"]').addEventListener('click', sheet.close);
+
+  let color = isPet ? petColor(r, state.pets) : null;
+  const preview = () => {
+    if (!isPet) return;
+    const draft = { ...r, id: r.id ?? 'new', name: $('#l-name').value.trim() || 'Name', coat: $('#l-coat').value, color };
+    $('[data-preview]').innerHTML = petTag(draft, state.pets, { amount: 'RM 0.00' });
+  };
+  if (isPet) {
+    sheet.el.querySelectorAll('[data-color]').forEach(b => b.addEventListener('click', () => {
+      color = b.dataset.color;
+      sheet.el.querySelectorAll('[data-color]').forEach(x => {
+        x.style.borderColor = x === b ? 'var(--ink)' : 'transparent';
+        x.setAttribute('aria-pressed', String(x === b));
+      });
+      preview();
+    }));
+    $('#l-coat').addEventListener('change', preview);
+    $('#l-name').addEventListener('input', preview);
+    preview();
+  }
+
   $('form').addEventListener('submit', async e => {
     e.preventDefault();
     const name = $('#l-name').value.trim();
@@ -280,6 +311,7 @@ function listItemForm(key, row, save, done) {
     const out = { ...(row ?? {}), name, active: $('#l-active').checked, sort: r.sort };
     if (isMember) out.email = email;
     if (isCategory) out.kind = $('#l-kind').value;
+    if (isPet) { out.coat = $('#l-coat').value; out.color = color; }
     if (await guarded(() => save(out), 'Saved')) { sheet.close(); done(); }
   });
 }

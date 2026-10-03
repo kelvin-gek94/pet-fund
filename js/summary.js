@@ -67,7 +67,7 @@ export function summaryText(s) {
   const out = ['```', `🐾 ${s.title}`, row('Cash', s.cash), row('Available', s.available), runwayText(s)];
   if (s.reserve > 0) out.push(row('Reserve', s.reserve));
 
-  out.push('', 'CONTRIBUTIONS');
+  out.push('', 'CHIP-INS');
   for (const c of s.contributions) {
     out.push(c.total_cents > 0 ? row(c.name, c.total_cents) : `${padEnd(trunc(c.name, LABEL), LABEL)} —  not yet`);
   }
@@ -79,7 +79,7 @@ export function summaryText(s) {
   if (s.spendTotal > 0) out.push(row('Needs', s.need_cents), row('Wants', s.want_cents));
 
   if (s.claims.length) {
-    out.push('', 'CLAIMS (to reimburse)');
+    out.push('', 'TO PAY BACK');
     for (const c of s.claims) out.push(row(c.name, c.total_cents));
   }
   if (s.due.length) {
@@ -103,13 +103,13 @@ export async function drawSummaryImage(s) {
       ['Runway', s.runway == null ? '—' : `≈ ${s.runway} months${s.belowReserve ? '  ⚠ below reserve' : ''}`],
       ...(s.reserve > 0 ? [['Reserve target', formatRM(s.reserve)]] : []),
     ]],
-    ['Contributions', [
+    ['Chip-ins', [
       ...s.contributions.map(c => [c.name, c.total_cents > 0 ? formatRM(c.total_cents) : 'Not yet']),
       ['Total', formatRM(s.contribTotal)],
     ]],
     ['Spending', [...s.spending.map(x => [x.name, formatRM(x.total_cents)]), ['Total', formatRM(s.spendTotal)],
       ...(s.spendTotal > 0 ? [['Needs', formatRM(s.need_cents)], ['Wants', formatRM(s.want_cents)]] : [])]],
-    ...(s.claims.length ? [['Claims to reimburse', s.claims.map(c => [c.name, formatRM(c.total_cents)])]] : []),
+    ...(s.claims.length ? [['To pay back', s.claims.map(c => [c.name, formatRM(c.total_cents)])]] : []),
     ...(s.due.length ? [['Due soon', s.due.map(d => {
       const [, mm, dd] = d.date.split('-');
       return [d.name, `${dd}/${mm}${d.overdue ? ' (overdue)' : ''}`];
@@ -122,25 +122,25 @@ export async function drawSummaryImage(s) {
   canvas.width = W;
   canvas.height = H;
   const g = canvas.getContext('2d');
-  g.fillStyle = '#fbf8f3';
+  g.fillStyle = '#F4F6F3';
   g.fillRect(0, 0, W, H);
-  g.fillStyle = '#2b2118';
-  g.font = '700 52px system-ui, sans-serif';
+  g.fillStyle = '#1E2B2A';
+  g.font = '600 56px "Baloo 2", system-ui, sans-serif';
   g.fillText(`🐾 ${s.title}`, PAD, PAD + 52);
 
   let y = PAD + 110;
   for (const [heading, items] of sections) {
-    g.fillStyle = '#c2632e';
+    g.fillStyle = '#1E2B2A';
     g.fillRect(PAD, y, W - PAD * 2, HEAD);
     g.fillStyle = '#ffffff';
-    g.font = '600 34px system-ui, sans-serif';
-    g.fillText(heading.toUpperCase(), PAD + 24, y + 50);
+    g.font = '600 36px "Baloo 2", system-ui, sans-serif';
+    g.fillText(heading, PAD + 24, y + 50);
     y += HEAD;
     items.forEach(([label, value], i) => {
       const isTotal = label === 'Total';
-      g.fillStyle = i % 2 ? '#f1e9df' : '#ffffff';
+      g.fillStyle = i % 2 ? '#E6EBE6' : '#FFFFFF';
       g.fillRect(PAD, y, W - PAD * 2, ROW);
-      g.fillStyle = '#2b2118';
+      g.fillStyle = '#1E2B2A';
       g.font = `${isTotal ? 700 : 400} 32px system-ui, sans-serif`;
       g.textAlign = 'left';
       g.fillText(label, PAD + 24, y + 43);

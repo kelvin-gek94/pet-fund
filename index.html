@@ -4,19 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Pet Fund</title>
-  <meta name="theme-color" content="#c2632e">
+  <meta name="theme-color" content="#F4F6F3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141A19" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="login" class="screen-center" hidden>
     <div class="login-card">
-      <img src="icon.svg" alt="" width="72" height="72">
-      <h1>Pet Fund</h1>
-      <p class="muted">Murphy · Panda · Watson · Mochi · Poppy</p>
+      <img src="icon.svg" alt="" width="64" height="64">
+      <h1>Pet fund</h1>
+      <p class="muted" style="margin-bottom:28px">For Murphy, Panda, Watson, Mochi and Poppy.</p>
       <button id="google-btn" class="btn btn-primary btn-block">Sign in with Google</button>
       <p id="login-msg" class="muted small"></p>
     </div>
@@ -24,16 +28,16 @@
 
   <div id="app" hidden>
     <header class="topbar">
-      <span class="brand">🐾 Pet Fund</span>
-      <span id="who" class="muted small"></span>
+      <span class="brand"><span data-icon="paw" style="color:var(--brass)"></span>Pet fund</span>
+      <span id="who" class="who" title=""></span>
     </header>
     <main id="view"></main>
     <nav class="tabbar" aria-label="Main">
-      <a href="#/home" data-route="home"><span aria-hidden="true">🏠</span>Home</a>
-      <a href="#/history" data-route="history"><span aria-hidden="true">📜</span>History</a>
-      <a href="#/add" data-route="add" class="tab-add" aria-label="Add entry"><span aria-hidden="true">＋</span></a>
-      <a href="#/reports" data-route="reports"><span aria-hidden="true">📊</span>Reports</a>
-      <a href="#/more" data-route="more"><span aria-hidden="true">☰</span>More</a>
+      <a href="#/home" data-route="home"><span data-icon="home"></span>Home</a>
+      <a href="#/history" data-route="history"><span data-icon="receipt"></span>History</a>
+      <a href="#/add" data-route="add" class="tab-add" aria-label="Add an entry"><span data-icon="plus"></span></a>
+      <a href="#/reports" data-route="reports"><span data-icon="chart-bar"></span>Reports</a>
+      <a href="#/more" data-route="more"><span data-icon="dots"></span>More</a>
     </nav>
   </div>
 

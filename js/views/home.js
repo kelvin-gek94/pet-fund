@@ -1,13 +1,18 @@
-// Home dashboard: fund position, this month's contributions, due items, claims, summary sharing.
+// Home: are the pets covered, what each pet cost this month, who has chipped in, what's due.
 import { state, toast, nameOf } from '../app.js';
 import { formatRM } from '../money.js';
 import { todayMY, monthKey } from '../dates.js';
 import {
   cashInFund, availableCents, avgMonthlySpend, runway, contributionsInMonth,
-  pendingClaims, dueSoon, backupReminderDays, paidAhead,
+  pendingClaims, dueSoon, backupReminderDays, paidAhead, spendBy,
 } from '../calc.js';
 import { buildSummary, summaryText, drawSummaryImage } from '../summary.js';
-import { esc, shortDate, monthLabel } from '../ui.js';
+import { esc, monthLabel } from '../ui.js';
+import { petTag } from '../pets.js';
+import { coveredSentence, fullMonthName } from '../words.js';
+import { icon } from '../icons.js';
+
+const dayMonth = d => `${Number(d.slice(8, 10))} ${monthLabel(d.slice(0, 7)).slice(0, 3)}`;
 
 export function render(el) {
   const today = todayMY();
@@ -23,62 +28,53 @@ export function render(el) {
   const backupDays = backupReminderDays(settings, state.me);
   const ahead = paidAhead(txns, state.members, today);
 
+  const month = monthKey(today);
+  const perPet = spendBy(txns, 'pet_id', `${month}-01`, `${month}-31`);
+  const shared = perPet.get(null) ?? 0;
+  const pets = state.pets.filter(p => p.active);
+
   el.innerHTML = `
     ${backupDays != null ? `
       <div class="banner warn row">
-        <span>${backupDays === Infinity ? 'No backup yet' : `Last backup ${backupDays} days ago`}</span>
+        <span>${backupDays === Infinity ? 'No backup yet.' : `Last backup was ${backupDays} days ago.`}</span>
         <button class="btn" data-act="backup">Back up now</button>
       </div>` : ''}
 
-    ${due.length ? `
-      <a class="banner ${due.some(d => d.overdue) ? 'danger' : 'warn'}" href="#/more?tab=upcoming" style="display:block;text-decoration:none">
-        <strong>Due soon</strong>
-        ${due.map(d => `<div class="row small"><span>${esc(d.name)}</span>
-          <span>${d.overdue ? 'Overdue · ' : ''}${shortDate(d.next_due)} · ~${formatRM(d.est_amount_cents)}</span></div>`).join('')}
-      </a>` : ''}
+    <p class="headline">${esc(coveredSentence(rw))}</p>
+    <p class="subline num">${formatRM(avail)} available<br>${formatRM(cash)} in the fund account${reserve > 0 ? `<br>Keeping ${formatRM(reserve)} in reserve` : ''}</p>
 
-    <div class="card">
-      <div class="figures">
-        <div><div class="muted small">Cash in fund</div><div class="figure num">${formatRM(cash)}</div></div>
-        <div><div class="muted small">Available</div><div class="figure num">${formatRM(avail)}</div></div>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <span class="muted small">Runway</span>
-        <strong>${rw.months == null ? '—' : `≈ ${rw.months} months`}</strong>
-      </div>
-      ${reserve > 0 ? `<div class="row small"><span class="muted">Reserve target</span><span>${formatRM(reserve)}</span></div>` : ''}
-      ${rw.belowReserve ? `<div class="banner warn small" style="margin:10px 0 0">Available is below the ${formatRM(reserve)} reserve.</div>` : ''}
+    <div class="tagrow" aria-label="Spending per pet this month">
+      ${pets.map(p => petTag(p, state.pets, { amount: formatRM(perPet.get(p.id) ?? 0) })).join('')}
     </div>
+    ${shared > 0 ? `<p class="muted small" style="margin:2px 0 0">Plus ${formatRM(shared)} shared by all pets this month.</p>` : ''}
 
-    <div class="card">
-      <h3>This month <span class="muted small">(${monthLabel(monthKey(today))})</span></h3>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${contribs.map(c => c.total_cents > 0
-          ? `<span class="chip ok">✓ ${esc(c.name)} ${formatRM(c.total_cents)}</span>`
-          : `<span class="chip">${esc(c.name)} · not yet</span>`).join('')}
-      </div>
-      ${ahead.length ? `<p class="muted small" style="margin:10px 0 0">Paid ahead: ${ahead
-        .map(a => `${esc(a.name)} (${monthLabel(a.month).slice(0, 3)})`).join(', ')}</p>` : ''}
+    <h3>${fullMonthName(month)} chip-ins</h3>
+    <ul class="rows">
+      ${contribs.map(c => `<li>
+        <span class="tick">${c.total_cents > 0 ? '✓' : ''}</span>
+        <span class="grow">${esc(c.name)}</span>
+        <span class="end num ${c.total_cents > 0 ? '' : 'warn-text'}">${c.total_cents > 0 ? formatRM(c.total_cents) : 'not yet'}</span>
+      </li>`).join('')}
+    </ul>
+
+    <div class="facts">
+      ${ahead.length ? `<div><span>Paid ahead</span><span>${ahead.map(a => `${esc(a.name)} for ${fullMonthName(a.month)}`).join('<br>')}</span></div>` : ''}
+      ${due.length ? `<div><span>Due soon</span><a href="#/more?tab=upcoming" style="text-decoration:none">${due.map(d =>
+        `<span class="${d.overdue ? 'out' : ''}">${esc(d.name)}, ${d.overdue ? 'overdue since ' : ''}${dayMonth(d.next_due)}</span>`).join('<br>')}</a></div>` : ''}
+      ${claims.length ? `<div><span>To pay back</span><a href="#/more?tab=claims" style="text-decoration:none">${claims.map(c =>
+        `${esc(nameOf('members', c.member_id))}, <span class="num">${formatRM(c.total_cents)}</span>`).join('<br>')}</a></div>` : ''}
     </div>
-
-    ${claims.length ? `
-      <a class="card" href="#/more?tab=claims" style="display:block;color:inherit;text-decoration:none">
-        <h3>To reimburse</h3>
-        ${claims.map(c => `<div class="row small"><span>${esc(nameOf('members', c.member_id))}</span>
-          <span class="num">${formatRM(c.total_cents)} · ${c.count} item${c.count > 1 ? 's' : ''}</span></div>`).join('')}
-      </a>` : ''}
 
     <div class="btn-row">
-      <button class="btn" data-act="copy">📋 Copy text</button>
-      <button class="btn" data-act="share">🖼️ Share image</button>
+      <button class="btn" data-act="copy">${icon('copy', 18)}Copy for WhatsApp</button>
+      <button class="btn" data-act="share">${icon('photo', 18)}Share image</button>
     </div>`;
-
   const summary = () => buildSummary({ ...state, today });
 
   el.querySelector('[data-act="copy"]').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(summaryText(summary()));
-      toast('Copied — paste it in WhatsApp');
+      toast('Copied. Paste it in the family chat.');
     } catch {
       toast("Couldn't copy on this device");
     }

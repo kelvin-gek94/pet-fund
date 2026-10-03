@@ -1,5 +1,9 @@
 // Boot, sign-in gate, shared state and hash router.
 import * as db from './db.js';
+import { icon } from './icons.js';
+
+// Static icons in the page frame (tab bar, header).
+document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon, el.closest('.tab-add') ? 24 : 20); });
 
 export const state = {
   members: [], pets: [], categories: [], txns: [], upcoming: [], settings: {}, me: null,
@@ -80,7 +84,8 @@ async function start(session) {
   }
   $('login').hidden = true;
   $('app').hidden = false;
-  $('who').textContent = state.me.name;
+  $('who').textContent = state.me.name.slice(0, 1).toUpperCase();
+  $('who').title = state.me.name;
   render();
 }
 

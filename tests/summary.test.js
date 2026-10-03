@@ -43,7 +43,7 @@ test('summary title and figures', () => {
 
 test('empty claims and due sections are omitted', () => {
   const txt = summaryText(buildSummary({ ...fixture, txns: txns.slice(0, 4), upcoming: [] }));
-  assert(!txt.includes('CLAIMS'), 'claims omitted');
+  assert(!txt.includes('TO PAY BACK'), 'pay-back section omitted');
   assert(!txt.includes('DUE'), 'due omitted');
 });
 
@@ -75,4 +75,10 @@ test('summary shows needs and wants under spending', () => {
   const txt = summaryText(s);
   assert(/Needs\s+RM 520\.00/.test(txt), 'needs row');
   assert(/Wants\s+RM 120\.00/.test(txt), 'wants row');
+});
+
+test('summary uses family wording: chip-ins and to pay back', () => {
+  const txt = summaryText(buildSummary(fixture));
+  assert(txt.includes('CHIP-INS'), 'chip-ins heading');
+  assert(txt.includes('TO PAY BACK'), 'pay-back heading (fixture has a pending claim)');
 });

@@ -7,6 +7,8 @@ import { nextDueAfterPaid, fundMonth, defaultForMonth, forMonthOptions } from '.
 import { resizeImage } from '../image.js';
 import { canEditTxn } from '../roles.js';
 import { txnLines, linesError } from '../lines.js';
+import { petTag, petColor } from '../pets.js';
+import { icon } from '../icons.js';
 import { esc, options, choices, monthLabel } from '../ui.js';
 
 export function render(el, params) {
@@ -29,9 +31,9 @@ export function render(el, params) {
   let receiptRemoved = false;    // existing photo removed
 
   el.innerHTML = `
-    <h2>${existing ? 'Edit entry' : 'Add entry'}</h2>
+    <h2>${existing ? 'Edit entry' : 'New entry'}</h2>
     <div class="segmented" role="tablist">
-      <button type="button" data-type="contribution">Contribution</button>
+      <button type="button" data-type="contribution">Chip-in</button>
       <button type="button" data-type="expense">Expense</button>
     </div>
     <form novalidate>
@@ -56,21 +58,23 @@ export function render(el, params) {
       </div>
       <div data-for="expense">
         <div data-lines></div>
-        <button type="button" class="btn btn-block" data-add-line>＋ Add line</button>
-        <div class="row" style="margin:10px 0 14px"><span class="muted">Receipt total</span><strong class="num" data-total>RM 0.00</strong></div>
+        <button type="button" class="link-btn" data-add-line>＋ Add a line</button>
+        <div class="total"><span class="muted">Receipt total</span><span class="display num" data-total>RM 0.00</span></div>
         <div class="error" data-err="lines"></div>
         <div class="field">
-          <label for="f-paidto">Paid to (shop / vet)</label>
+          <label for="f-paidto">Shop or vet</label>
           <input id="f-paidto" autocomplete="off" value="${esc(t.paid_to)}">
         </div>
         <div class="field">
           <label for="f-paidby">Paid by</label>
           <select id="f-paidby">${options(choices(state.members, t.paid_by_member_id), t.paid_by_member_id,'Fund (Kelvin\'s account)')}</select>
-          <p class="muted small" data-claim-hint hidden>This becomes a claim until Kelvin reimburses it.</p>
+          <p class="muted small" data-claim-hint hidden>Kelvin pays them back later. It shows under To pay back.</p>
         </div>
         <div class="field">
-          <label for="f-receipt">Receipt photo</label>
-          <input id="f-receipt" type="file" accept="image/*">
+          <label>Receipt photo</label>
+          <label for="f-receipt" class="btn" style="color:var(--ink);font-size:0.95rem;margin:0">${icon('camera', 18)}Add a photo</label>
+          <input id="f-receipt" type="file" accept="image/*" style="position:absolute;opacity:0;width:1px;height:1px">
+          <p class="muted small" style="margin:6px 0 0">Crop out any bank account numbers first.</p>
           <div data-receipt></div>
           <div class="error" data-err="receipt"></div>
         </div>
@@ -80,7 +84,7 @@ export function render(el, params) {
         <input id="f-note" autocomplete="off" value="${esc(t.note)}">
       </div>
       <div class="error" data-err="save"></div>
-      <button class="btn btn-primary btn-block" type="submit">Save</button>
+      <button class="btn btn-primary btn-block" type="submit" data-save>Save</button>
     </form>`;
 
   const $ = s => el.querySelector(s);
@@ -115,6 +119,8 @@ export function render(el, params) {
   const lines = startLines.map(l => ({ ...l, pet_ids: [...l.pet_ids], text: l.amount_cents ? fromCents(l.amount_cents).toFixed(2) : '' }));
 
   const petsFor = l => state.pets.filter(p => p.active || l.pet_ids.includes(p.id));
+  const kindNote = l => (state.categories.find(c => c.id === l.category_id)?.kind === 'want'
+    ? ' <span class="muted" style="font-weight:400">(a want)</span>' : '');
   function updateTotal() {
     const total = sumCents(lines.map(l => parseAmount(l.text) ?? 0));
     $('[data-total]').textContent = formatRM(total);
@@ -122,24 +128,24 @@ export function render(el, params) {
   function drawLines() {
     const many = lines.length > 1;
     $('[data-lines]').innerHTML = lines.map((l, i) => `
-      <div class="line-card" data-i="${i}">
+      <div class="line-card" data-i="${i}" style="border-left-color:${l.pet_ids.length ? petColor(state.pets.find(p => p.id === l.pet_ids[0]) ?? {}, state.pets) : 'var(--line-strong)'}">
         <div class="row" style="margin-bottom:8px">
-          <strong class="small">${many ? `Line ${i + 1}` : 'What was bought'}</strong>
+          <strong class="small">${many ? `Line ${i + 1}` : 'What was bought'}${kindNote(l)}</strong>
           ${many ? '<button type="button" class="link-btn small" data-remove>Remove</button>' : ''}
         </div>
         <div class="field"><label>Category</label>
           <select data-cat>${options(choices(state.categories, l.category_id), l.category_id, 'Choose…')}</select></div>
         <div class="field"><label>For</label>
           <div class="chips">
-            <button type="button" class="chip${l.pet_ids.length ? '' : ' ok'}" data-allpets>All pets</button>
-            ${petsFor(l).map(p => `<button type="button" class="chip${l.pet_ids.includes(p.id) ? ' ok' : ''}" data-pet="${p.id}">${esc(p.name)}</button>`).join('')}
+            <button type="button" class="pettag small${l.pet_ids.length ? ' off' : ''}" style="background:var(--ink);color:var(--paper)" data-allpets aria-pressed="${!l.pet_ids.length}">${icon('paw', 16)}<span class="name">All pets</span></button>
+            ${petsFor(l).map(p => petTag(p, state.pets, { button: true, small: true, on: l.pet_ids.includes(p.id) })).join('')}
           </div></div>
         <div class="field" style="margin-bottom:0"><label>Amount (RM)</label>
           <input data-amt inputmode="decimal" autocomplete="off" placeholder="0.00" value="${esc(l.text)}"></div>
       </div>`).join('');
     $('[data-lines]').querySelectorAll('.line-card').forEach(card => {
       const l = lines[Number(card.dataset.i)];
-      card.querySelector('[data-cat]').addEventListener('change', e => { l.category_id = e.target.value || null; });
+      card.querySelector('[data-cat]').addEventListener('change', e => { l.category_id = e.target.value || null; drawLines(); });
       card.querySelector('[data-amt]').addEventListener('input', e => { l.text = e.target.value; updateTotal(); });
       card.querySelector('[data-allpets]').addEventListener('click', () => { l.pet_ids = []; drawLines(); });
       card.querySelectorAll('[data-pet]').forEach(b => b.addEventListener('click', () => {
