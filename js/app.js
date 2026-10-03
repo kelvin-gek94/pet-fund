@@ -20,12 +20,12 @@ export function navigate(route, params = {}) {
 }
 
 let toastTimer;
-export function toast(msg) {
+export function toast(msg, ms = 2400) {
   const el = $('toast');
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
 // Shared lookups for views

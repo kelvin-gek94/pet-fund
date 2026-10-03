@@ -6,7 +6,8 @@ import { todayMY } from './dates.js';
 
 export const BACKUP_SCHEMA_VERSION = 1;
 
-export async function buildBackupZip() {
+export async function buildBackupZip(onStep = () => {}) {
+  onStep('reading data');
   const tables = await db.exportTables();
   const zip = new JSZip();
   zip.file('data.json', JSON.stringify({
@@ -15,6 +16,7 @@ export async function buildBackupZip() {
     tables,
   }, null, 2));
 
+  onStep('fetching receipts');
   const paths = [...new Set(tables.transactions.map(t => t.receipt_path).filter(Boolean))];
   const failed = [];
   let receiptCount = 0;
@@ -28,18 +30,23 @@ export async function buildBackupZip() {
       failed.push(path);
     }
   }
+  onStep('building zip');
   const blob = await zip.generateAsync({ type: 'blob' });
   return { blob, filename: `pet-fund-backup-${todayMY()}.zip`, receiptCount, failed };
 }
 
 export async function runBackup() {
+  let step = 'starting';
   toast('Preparing backup…');
   try {
-    const { blob, filename, receiptCount, failed } = await buildBackupZip();
+    const { blob, filename, receiptCount, failed } = await buildBackupZip(s => { step = s; });
     // Record the backup BEFORE downloading: on iPhone the download sheet takes over the page
     // and cancels any request still in flight ("Load failed").
+    step = 'saving backup record';
     await db.saveSettings({ last_backup_at: new Date().toISOString(), last_backup_by: state.me.id });
+    step = 'reloading';
     await refresh();
+    step = 'downloading';
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
@@ -49,6 +56,6 @@ export async function runBackup() {
       ? `Backup saved, but ${failed.length} receipt(s) couldn't be included`
       : `Backup saved (${receiptCount} receipt${receiptCount === 1 ? '' : 's'})`);
   } catch (ex) {
-    toast(`Backup failed: ${ex.message}`);
+    toast(`Backup failed while ${step}: ${ex.message}`, 10000);
   }
 }

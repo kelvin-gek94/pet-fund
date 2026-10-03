@@ -4,6 +4,7 @@ import * as db from '../db.js';
 import { formatRM, parseAmount, parseBalance, fromCents, sumCents } from '../money.js';
 import { todayMY, addDays } from '../dates.js';
 import { pendingClaims } from '../calc.js';
+import { APP_VERSION } from '../version.js';
 import { esc, options, openSheet, shortDate, choices } from '../ui.js';
 
 const TABS = { upcoming: 'Upcoming', claims: 'Claims', settings: 'Settings' };
@@ -210,7 +211,8 @@ function renderSettings(body) {
     <p class="muted small" style="margin:-4px 0 12px">Only active members with a Google email listed here can see the fund. Untick Active to remove someone's access.</p>
     ${listEditor('pets', 'Pets')}
     ${listEditor('categories', 'Categories')}
-    <button class="btn btn-block" data-signout>Sign out</button>`;
+    <button class="btn btn-block" data-signout>Sign out</button>
+    <p class="muted small" style="text-align:center;margin-top:12px">App version ${APP_VERSION}</p>`;
 
   body.querySelector('[data-fund]').addEventListener('submit', async e => {
     e.preventDefault();
