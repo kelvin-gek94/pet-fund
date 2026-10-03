@@ -36,13 +36,15 @@ export async function runBackup() {
   toast('Preparing backup…');
   try {
     const { blob, filename, receiptCount, failed } = await buildBackupZip();
+    // Record the backup BEFORE downloading: on iPhone the download sheet takes over the page
+    // and cancels any request still in flight ("Load failed").
+    await db.saveSettings({ last_backup_at: new Date().toISOString(), last_backup_by: state.me.id });
+    await refresh();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-    await db.saveSettings({ last_backup_at: new Date().toISOString(), last_backup_by: state.me.id });
-    await refresh();
     toast(failed.length
       ? `Backup saved, but ${failed.length} receipt(s) couldn't be included`
       : `Backup saved (${receiptCount} receipt${receiptCount === 1 ? '' : 's'})`);
