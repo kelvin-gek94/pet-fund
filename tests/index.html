@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pet Fund tests</title>
+  <style>body { font: 14px/1.4 ui-monospace, Consolas, monospace; padding: 16px; }</style>
+</head>
+<body>
+  <pre id="result">running…</pre>
+  <script type="module">
+    import { run } from './harness.js';
+    const files = ['money', 'dates', 'calc', 'summary', 'ui', 'paging'];
+    const el = document.getElementById('result');
+    const importErrors = [];
+    for (const f of files) {
+      try {
+        await import(`./${f}.test.js`);
+      } catch (err) {
+        importErrors.push(`FAIL: cannot load ${f}.test.js\n  ${err.message}`);
+      }
+    }
+    await run(el);
+    if (importErrors.length) {
+      el.textContent = `${importErrors.join('\n')}\n${el.textContent.replace(/^ALL PASS.*$/, '')}`.trim();
+    }
+  </script>
+</body>
+</html>
