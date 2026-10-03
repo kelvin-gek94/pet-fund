@@ -1,6 +1,7 @@
 // Pure fund calculations. Every function ignores soft-deleted rows.
 import { sumCents } from './money.js';
 import { monthKey, previousMonths, addDays, addMonthsClamped } from './dates.js';
+import { txnLines, splitEvenly } from './lines.js';
 
 const live = txns => txns.filter(t => !t.deleted_at);
 const expenses = txns => live(txns).filter(t => t.type === 'expense');
@@ -79,14 +80,30 @@ export function nextDueAfterPaid(item) {
   return addMonthsClamped(item.next_due, step);
 }
 
+// Spending per category or per pet, by receipt line. A line for several pets is split evenly;
+// a line for no particular pet counts under null ("All pets").
 export function spendBy(txns, field, from, to) {
   const out = new Map();
+  const add = (key, cents) => out.set(key, (out.get(key) ?? 0) + cents);
   for (const t of expenses(txns)) {
     if (t.date < from || t.date > to) continue;
-    const key = t[field] ?? null;
-    out.set(key, (out.get(key) ?? 0) + t.amount_cents);
+    for (const line of txnLines(t)) {
+      if (field === 'category_id') add(line.category_id ?? null, line.amount_cents);
+      else if (!line.pet_ids.length) add(null, line.amount_cents);
+      else splitEvenly(line.amount_cents, line.pet_ids.length).forEach((c, i) => add(line.pet_ids[i], c));
+    }
   }
   return out;
+}
+
+// Needs vs wants by each line's category; categories without a label count as needs.
+export function needsWants(txns, categories, from, to) {
+  const kind = new Map(categories.map(c => [c.id, c.kind ?? 'need']));
+  let need_cents = 0, want_cents = 0;
+  for (const [id, cents] of spendBy(txns, 'category_id', from, to)) {
+    if (kind.get(id) === 'want') want_cents += cents; else need_cents += cents;
+  }
+  return { need_cents, want_cents };
 }
 
 export function inOutByMonth(txns, fromMonth, toMonth) {

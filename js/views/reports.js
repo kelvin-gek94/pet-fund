@@ -2,7 +2,7 @@
 import { state, nameOf } from '../app.js';
 import { formatRM, sumCents } from '../money.js';
 import { todayMY, monthKey } from '../dates.js';
-import { spendBy, inOutByMonth, fundMonth } from '../calc.js';
+import { spendBy, inOutByMonth, fundMonth, needsWants } from '../calc.js';
 import { esc } from '../ui.js';
 
 const view = { mode: 'month', month: null, year: null };
@@ -50,6 +50,7 @@ export function render(el) {
     .filter(r => r.cents > 0);
   const totalIn = sumCents(inRange.filter(t => t.type === 'contribution').map(t => t.amount_cents));
   const totalOut = sumCents(byCategory.map(r => r.cents));
+  const nw = needsWants(live, state.categories, from, to);
 
   // Start the trend at the first month with entries, so months before the app existed aren't listed.
   const firstMonth = months.at(-1);
@@ -73,6 +74,7 @@ export function render(el) {
       <div><div class="muted small">Spent</div><div class="figure num out">${formatRM(totalOut)}</div></div>
     </div>
     <div class="card"><h3>Spending by category</h3>${bars(byCategory)}</div>
+    <div class="card"><h3>Needs vs wants</h3>${bars([{ label: 'Needs', cents: nw.need_cents }, { label: 'Wants', cents: nw.want_cents }].filter(x => x.cents > 0))}</div>
     <div class="card"><h3>Spending by pet</h3>${bars(byPet)}</div>
     <div class="card"><h3>Contributions for this period</h3>${bars(byMember, 'in')}</div>
     ${view.mode === 'year' ? `

@@ -2,7 +2,7 @@ import { test, assertEqual, assertDeep } from './harness.js';
 import {
   cashInFund, pendingClaims, availableCents, spendInMonth, avgMonthlySpend, runway,
   contributionsInMonth, dueSoon, nextDueAfterPaid, spendBy, inOutByMonth, backupReminderDays,
-  paidAhead, forMonthOptions, defaultForMonth,
+  paidAhead, forMonthOptions, defaultForMonth, needsWants,
 } from '../js/calc.js';
 
 const members = ['Kelvin', 'Vincent', 'Desmond', 'Jolyn', 'Dickson']
@@ -135,3 +135,29 @@ test('defaultForMonth: this month, or the next unpaid month', () => {
   const both = [...early, { ...base, id: 'e5', type: 'contribution', date: '2026-10-21', amount_cents: 100, member_id: 'kelvin', for_month: '2026-11-01' }];
   assertEqual(defaultForMonth(both, 'kelvin', '2026-10-21'), '2026-12');
 });
+
+// ── Receipt lines, multi-pet, needs vs wants ──
+const cats = [{ id: 'food', kind: 'need' }, { id: 'treats', kind: 'want' }, { id: 'vet' }];
+const mixed = [{
+  ...base, id: 'm1', type: 'expense', date: '2026-10-05', amount_cents: 14500, category_id: 'food',
+  lines: [
+    { category_id: 'food', pet_ids: ['mochi', 'poppy'], amount_cents: 8000 },
+    { category_id: 'food', pet_ids: ['panda'], amount_cents: 4000 },
+    { category_id: 'treats', pet_ids: ['panda'], amount_cents: 2500 },
+  ],
+}, { ...base, id: 'm2', type: 'expense', date: '2026-10-06', amount_cents: 1000, category_id: 'vet', pet_id: null }];
+
+test('spendBy category counts each line', () => {
+  assertDeep([...spendBy(mixed, 'category_id', '2026-10-01', '2026-10-31')], [['food', 12000], ['treats', 2500], ['vet', 1000]]);
+});
+
+test('spendBy pet splits multi-pet lines evenly; no pets = All pets', () => {
+  assertDeep([...spendBy(mixed, 'pet_id', '2026-10-01', '2026-10-31')],
+    [['mochi', 4000], ['poppy', 4000], ['panda', 6500], [null, 1000]]);
+});
+
+test('needsWants: unlabelled categories count as needs', () => {
+  assertDeep(needsWants(mixed, cats, '2026-10-01', '2026-10-31'), { need_cents: 13000, want_cents: 2500 });
+});
+
+test('month spend still uses the receipt total', () => assertEqual(spendInMonth(mixed, '2026-10'), 15500));

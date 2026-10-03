@@ -6,6 +6,7 @@ import { todayMY, monthKey } from '../dates.js';
 import { esc, options, openSheet, shortDate, monthLabel } from '../ui.js';
 import { fundMonth } from '../calc.js';
 import { canEditTxn } from '../roles.js';
+import { txnLines } from '../lines.js';
 
 const filters = { month: null, type: '', pet: '', category: '', person: '', deleted: false };
 
@@ -14,16 +15,20 @@ function label(t) {
     const forOther = fundMonth(t) !== monthKey(t.date) ? ` · for ${monthLabel(fundMonth(t))}` : '';
     return `${nameOf('members', t.member_id)} · contribution${forOther}`;
   }
-  const pet = t.pet_id ? nameOf('pets', t.pet_id) : 'All pets';
-  return [nameOf('categories', t.category_id), pet, t.paid_to].filter(Boolean).join(' · ');
+  const ls = txnLines(t);
+  const cats = [...new Set(ls.map(l => nameOf('categories', l.category_id)))].join(', ');
+  const petIds = [...new Set(ls.flatMap(l => l.pet_ids))];
+  const pets = [...petIds.map(id => nameOf('pets', id)), ...(ls.some(l => !l.pet_ids.length) ? ['All pets'] : [])].join(', ');
+  return [cats, pets, t.paid_to].filter(Boolean).join(' · ');
 }
 
 function matches(t) {
   if (filters.deleted !== !!t.deleted_at) return false;
   if (filters.month && monthKey(t.date) !== filters.month) return false;
   if (filters.type && t.type !== filters.type) return false;
-  if (filters.pet && (filters.pet === 'all' ? t.pet_id != null || t.type !== 'expense' : t.pet_id !== filters.pet)) return false;
-  if (filters.category && t.category_id !== filters.category) return false;
+  const ls = txnLines(t);
+  if (filters.pet && !ls.some(l => (filters.pet === 'all' ? !l.pet_ids.length : l.pet_ids.includes(filters.pet)))) return false;
+  if (filters.category && !ls.some(l => l.category_id === filters.category)) return false;
   if (filters.person && t.member_id !== filters.person && t.paid_by_member_id !== filters.person) return false;
   return true;
 }

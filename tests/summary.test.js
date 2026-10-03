@@ -69,3 +69,10 @@ test('amounts of RM 1 billion+ still fit in 30 chars', () => {
   const s = buildSummary({ ...fixture, settings: { opening_balance_cents: -123456789012, reserve_target_cents: 0 } });
   for (const l of summaryText(s).split('\n')) assert([...l].length <= 30, `too long: "${l}"`);
 });
+
+test('summary shows needs and wants under spending', () => {
+  const s = buildSummary({ ...fixture, categories: [{ id: 'vet', name: 'Vet', kind: 'need', active: true }, { id: 'food', name: 'Food', kind: 'want', active: true }] });
+  const txt = summaryText(s);
+  assert(/Needs\s+RM 520\.00/.test(txt), 'needs row');
+  assert(/Wants\s+RM 120\.00/.test(txt), 'wants row');
+});

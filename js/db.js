@@ -3,6 +3,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { toCents, fromCents } from './money.js';
 import { fetchAllPages } from './paging.js';
+import { linesFromDb, linesToDb } from './lines.js';
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -36,7 +37,7 @@ export function onAuth(cb) {
 
 // ───── Row converters ─────
 
-const txnIn = r => ({ ...r, amount_cents: toCents(r.amount) });
+const txnIn = r => ({ ...r, amount_cents: toCents(r.amount), lines: r.lines ? linesFromDb(r.lines) : null });
 const upcomingIn = r => ({ ...r, est_amount_cents: toCents(r.est_amount) });
 const settingsIn = r => ({
   ...r,
@@ -79,6 +80,12 @@ export async function loadAll(session) {
 export async function saveTxn(txn) {
   const row = strip(txn, ['amount_cents']);
   row.amount = fromCents(txn.amount_cents);
+  if (txn.type === 'expense' && txn.lines?.length) {
+    row.lines = linesToDb(txn.lines);
+    // Also fill the older single-category columns, so a phone still on an older version can read it.
+    row.category_id = txn.lines[0].category_id;
+    row.pet_id = txn.lines.length === 1 && txn.lines[0].pet_ids.length === 1 ? txn.lines[0].pet_ids[0] : null;
+  }
   if (!row.id) row.id = crypto.randomUUID();
   const data = check(await sb.from('transactions').upsert(row).select().single());
   return txnIn(data);

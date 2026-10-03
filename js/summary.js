@@ -3,7 +3,7 @@ import { formatRM, sumCents } from './money.js';
 import { monthKey } from './dates.js';
 import {
   cashInFund, availableCents, avgMonthlySpend, runway, contributionsInMonth,
-  pendingClaims, spendBy, dueSoon,
+  pendingClaims, spendBy, dueSoon, needsWants,
 } from './calc.js';
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -44,6 +44,7 @@ export function buildSummary({ txns, members, pets, categories, upcoming, settin
     contribTotal: sumCents(contributions.map(c => c.total_cents)),
     spending,
     spendTotal: sumCents(spending.map(s => s.total_cents)),
+    ...needsWants(txns, categories, `${month}-01`, `${month}-31`),
     claims: pendingClaims(txns).map(c => ({ name: nameOf(members, c.member_id, '?'), total_cents: c.total_cents })),
     due: dueSoon(upcoming, today).map(u => ({ name: u.name, date: u.next_due, overdue: u.overdue })),
   };
@@ -75,6 +76,7 @@ export function summaryText(s) {
   out.push('', 'SPENDING');
   for (const sp of s.spending) out.push(row(sp.name, sp.total_cents));
   out.push(row('Total', s.spendTotal));
+  if (s.spendTotal > 0) out.push(row('Needs', s.need_cents), row('Wants', s.want_cents));
 
   if (s.claims.length) {
     out.push('', 'CLAIMS (to reimburse)');
@@ -105,7 +107,8 @@ export async function drawSummaryImage(s) {
       ...s.contributions.map(c => [c.name, c.total_cents > 0 ? formatRM(c.total_cents) : 'Not yet']),
       ['Total', formatRM(s.contribTotal)],
     ]],
-    ['Spending', [...s.spending.map(x => [x.name, formatRM(x.total_cents)]), ['Total', formatRM(s.spendTotal)]]],
+    ['Spending', [...s.spending.map(x => [x.name, formatRM(x.total_cents)]), ['Total', formatRM(s.spendTotal)],
+      ...(s.spendTotal > 0 ? [['Needs', formatRM(s.need_cents)], ['Wants', formatRM(s.want_cents)]] : [])]],
     ...(s.claims.length ? [['Claims to reimburse', s.claims.map(c => [c.name, formatRM(c.total_cents)])]] : []),
     ...(s.due.length ? [['Due soon', s.due.map(d => {
       const [, mm, dd] = d.date.split('-');

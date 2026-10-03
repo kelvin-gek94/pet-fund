@@ -212,3 +212,24 @@ create policy "transactions: insert" on public.transactions for insert to authen
 create policy "transactions: own or admin update" on public.transactions for update to authenticated
   using (public.is_member() and (public.is_admin() or (created_by = public.current_member_id() and reimbursed_on is null)))
   with check (public.is_member() and (public.is_admin() or (created_by = public.current_member_id() and reimbursed_on is null)));
+
+-- ───────────── Receipt lines and Need / Want ─────────────
+alter table public.categories add column if not exists kind text not null default 'need';
+alter table public.categories drop constraint if exists categories_kind_check;
+alter table public.categories add constraint categories_kind_check check (kind in ('need', 'want'));
+insert into public.categories (name, kind, sort)
+  select v.name, 'want', v.sort from (values ('Treats', 8), ('Toys', 9)) as v(name, sort)
+  where not exists (select 1 from public.categories c where lower(c.name) = lower(v.name));
+
+-- Lines on expenses: [{ "category_id": uuid, "pet_ids": [uuid…] (empty = All pets), "amount": 12.30 }, …]
+alter table public.transactions add column if not exists lines jsonb;
+
+create or replace function public.lines_total(lines jsonb) returns numeric
+language sql immutable as $$
+  select coalesce(sum((l ->> 'amount')::numeric), 0) from jsonb_array_elements(lines) as l
+$$;
+alter table public.transactions drop constraint if exists lines_shape;
+alter table public.transactions add constraint lines_shape check (
+  lines is null or (
+    type = 'expense' and jsonb_typeof(lines) = 'array' and jsonb_array_length(lines) > 0
+    and public.lines_total(lines) = amount));

@@ -214,7 +214,7 @@ function renderSettings(body) {
       + (m.email ? `<br><span class="muted small">${esc(m.email)}</span>` : '<br><span class="muted small">no email — cannot sign in</span>'), admin)}
     <p class="muted small" style="margin:-4px 0 12px">Only active members with a Google email listed here can see the fund. Untick Active to remove someone's access.</p>
     ${listEditor('pets', 'Pets')}
-    ${listEditor('categories', 'Categories')}
+    ${listEditor('categories', 'Categories', c => (c.kind === 'want' ? ' <span class="tag">want</span>' : ''))}
     <button class="btn btn-block" data-signout>Sign out</button>
     <p class="muted small" style="text-align:center;margin-top:12px">App version ${APP_VERSION}</p>`;
 
@@ -249,6 +249,7 @@ function renderSettings(body) {
 
 function listItemForm(key, row, save, done) {
   const isMember = key === 'members';
+  const isCategory = key === 'categories';
   const r = row ?? { name: '', active: true, email: null, sort: state[key].length + 1 };
   const sheet = openSheet(`
     <h3>${row ? 'Edit' : 'Add'}</h3>
@@ -256,6 +257,9 @@ function listItemForm(key, row, save, done) {
       <div class="field"><label for="l-name">Name</label><input id="l-name" value="${esc(r.name)}"></div>
       ${isMember ? `<div class="field"><label for="l-email">Google email (optional)</label>
         <input id="l-email" type="email" autocomplete="off" value="${esc(r.email ?? '')}"></div>` : ''}
+      ${isCategory ? `<div class="field"><label for="l-kind">Type</label>
+        <select id="l-kind"><option value="need"${(r.kind ?? 'need') === 'need' ? ' selected' : ''}>Need (essentials: food, vet…)</option>
+        <option value="want"${r.kind === 'want' ? ' selected' : ''}>Want (treats, toys…)</option></select></div>` : ''}
       <div class="field"><label><input id="l-active" type="checkbox" style="width:auto;min-height:0"${r.active ? ' checked' : ''}> Active (shown in pickers)</label></div>
       <div class="error" data-err></div>
       <div class="btn-row"><button type="button" class="btn" data-a="cancel">Cancel</button><button class="btn btn-primary" type="submit">Save</button></div>
@@ -275,6 +279,7 @@ function listItemForm(key, row, save, done) {
     }
     const out = { ...(row ?? {}), name, active: $('#l-active').checked, sort: r.sort };
     if (isMember) out.email = email;
+    if (isCategory) out.kind = $('#l-kind').value;
     if (await guarded(() => save(out), 'Saved')) { sheet.close(); done(); }
   });
 }

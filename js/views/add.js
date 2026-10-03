@@ -1,11 +1,12 @@
 // Add / edit a contribution or expense. Also the landing spot for Upcoming → Mark paid.
 import { state, refresh, navigate, toast } from '../app.js';
 import * as db from '../db.js';
-import { parseAmount, fromCents } from '../money.js';
+import { parseAmount, fromCents, sumCents, formatRM } from '../money.js';
 import { todayMY } from '../dates.js';
 import { nextDueAfterPaid, fundMonth, defaultForMonth, forMonthOptions } from '../calc.js';
 import { resizeImage } from '../image.js';
 import { canEditTxn } from '../roles.js';
+import { txnLines, linesError } from '../lines.js';
 import { esc, options, choices, monthLabel } from '../ui.js';
 
 export function render(el, params) {
@@ -34,10 +35,10 @@ export function render(el, params) {
       <button type="button" data-type="expense">Expense</button>
     </div>
     <form novalidate>
-      <div class="field">
+      <div class="field" data-for="contribution">
         <label for="f-amount">Amount (RM)</label>
         <input id="f-amount" inputmode="decimal" autocomplete="off" placeholder="0.00"
-          value="${t.amount_cents ? fromCents(t.amount_cents).toFixed(2) : ''}">
+          value="${t.type === 'contribution' && t.amount_cents ? fromCents(t.amount_cents).toFixed(2) : ''}">
         <div class="error" data-err="amount"></div>
       </div>
       <div class="field">
@@ -54,15 +55,10 @@ export function render(el, params) {
         <p class="muted small">Paying early or late? Pick the month this money is for.</p>
       </div>
       <div data-for="expense">
-        <div class="field">
-          <label for="f-category">Category</label>
-          <select id="f-category">${options(choices(state.categories, t.category_id), t.category_id, 'Choose…')}</select>
-          <div class="error" data-err="category"></div>
-        </div>
-        <div class="field">
-          <label for="f-pet">Pet</label>
-          <select id="f-pet">${options(choices(state.pets, t.pet_id), t.pet_id, 'All pets')}</select>
-        </div>
+        <div data-lines></div>
+        <button type="button" class="btn btn-block" data-add-line>＋ Add line</button>
+        <div class="row" style="margin:10px 0 14px"><span class="muted">Receipt total</span><strong class="num" data-total>RM 0.00</strong></div>
+        <div class="error" data-err="lines"></div>
         <div class="field">
           <label for="f-paidto">Paid to (shop / vet)</label>
           <input id="f-paidto" autocomplete="off" value="${esc(t.paid_to)}">
@@ -111,6 +107,57 @@ export function render(el, params) {
   $('#f-formonth').addEventListener('change', () => { forMonthTouched = true; });
   $('#f-member').addEventListener('change', () => { if (!forMonthTouched) fillForMonth(); });
 
+  // ── Receipt lines: category, pets (none ticked = All pets) and amount per line ──
+  const startLines = existing?.type === 'expense' ? txnLines(existing)
+    : prefill?.type === 'expense'
+      ? [{ category_id: prefill.category_id ?? null, pet_ids: prefill.pet_id ? [prefill.pet_id] : [], amount_cents: prefill.amount_cents ?? null }]
+      : [{ category_id: null, pet_ids: [], amount_cents: null }];
+  const lines = startLines.map(l => ({ ...l, pet_ids: [...l.pet_ids], text: l.amount_cents ? fromCents(l.amount_cents).toFixed(2) : '' }));
+
+  const petsFor = l => state.pets.filter(p => p.active || l.pet_ids.includes(p.id));
+  function updateTotal() {
+    const total = sumCents(lines.map(l => parseAmount(l.text) ?? 0));
+    $('[data-total]').textContent = formatRM(total);
+  }
+  function drawLines() {
+    const many = lines.length > 1;
+    $('[data-lines]').innerHTML = lines.map((l, i) => `
+      <div class="line-card" data-i="${i}">
+        <div class="row" style="margin-bottom:8px">
+          <strong class="small">${many ? `Line ${i + 1}` : 'What was bought'}</strong>
+          ${many ? '<button type="button" class="link-btn small" data-remove>Remove</button>' : ''}
+        </div>
+        <div class="field"><label>Category</label>
+          <select data-cat>${options(choices(state.categories, l.category_id), l.category_id, 'Choose…')}</select></div>
+        <div class="field"><label>For</label>
+          <div class="chips">
+            <button type="button" class="chip${l.pet_ids.length ? '' : ' ok'}" data-allpets>All pets</button>
+            ${petsFor(l).map(p => `<button type="button" class="chip${l.pet_ids.includes(p.id) ? ' ok' : ''}" data-pet="${p.id}">${esc(p.name)}</button>`).join('')}
+          </div></div>
+        <div class="field" style="margin-bottom:0"><label>Amount (RM)</label>
+          <input data-amt inputmode="decimal" autocomplete="off" placeholder="0.00" value="${esc(l.text)}"></div>
+      </div>`).join('');
+    $('[data-lines]').querySelectorAll('.line-card').forEach(card => {
+      const l = lines[Number(card.dataset.i)];
+      card.querySelector('[data-cat]').addEventListener('change', e => { l.category_id = e.target.value || null; });
+      card.querySelector('[data-amt]').addEventListener('input', e => { l.text = e.target.value; updateTotal(); });
+      card.querySelector('[data-allpets]').addEventListener('click', () => { l.pet_ids = []; drawLines(); });
+      card.querySelectorAll('[data-pet]').forEach(b => b.addEventListener('click', () => {
+        const id = b.dataset.pet;
+        l.pet_ids = l.pet_ids.includes(id) ? l.pet_ids.filter(x => x !== id) : [...l.pet_ids, id];
+        drawLines();
+      }));
+      card.querySelector('[data-remove]')?.addEventListener('click', () => { lines.splice(Number(card.dataset.i), 1); drawLines(); });
+    });
+    updateTotal();
+  }
+  $('[data-add-line]').addEventListener('click', () => {
+    const last = lines.at(-1);
+    lines.push({ category_id: null, pet_ids: last ? [...last.pet_ids] : [], amount_cents: null, text: '' });
+    drawLines();
+  });
+  drawLines();
+
   const claimHint = () => { $('[data-claim-hint]').hidden = !$('#f-paidby').value; };
   $('#f-paidby').addEventListener('change', claimHint);
   claimHint();
@@ -153,14 +200,19 @@ export function render(el, params) {
 
   $('form').addEventListener('submit', async e => {
     e.preventDefault();
-    ['amount', 'category', 'save'].forEach(k => err(k));
-    const amount_cents = parseAmount($('#f-amount').value);
-    let ok = true;
-    if (amount_cents == null) { err('amount', 'Enter an amount above 0, up to 2 decimals.'); ok = false; }
-    if (type === 'expense' && !$('#f-category').value) { err('category', 'Choose a category.'); ok = false; }
-    if (!ok) return;
-
+    ['amount', 'lines', 'save'].forEach(k => err(k));
     const isExpense = type === 'expense';
+    const parsedLines = lines.map(l => ({ category_id: l.category_id, pet_ids: l.pet_ids, amount_cents: parseAmount(l.text) }));
+    let amount_cents;
+    if (isExpense) {
+      const msg = linesError(parsedLines);
+      if (msg) { err('lines', msg); return; }
+      amount_cents = sumCents(parsedLines.map(l => l.amount_cents));
+    } else {
+      amount_cents = parseAmount($('#f-amount').value);
+      if (amount_cents == null) { err('amount', 'Enter an amount above 0, up to 2 decimals.'); return; }
+    }
+
     const paidBy = isExpense ? ($('#f-paidby').value || null) : null;
     const txn = {
       id: txnId,
@@ -169,8 +221,9 @@ export function render(el, params) {
       amount_cents,
       member_id: isExpense ? null : $('#f-member').value,
       for_month: isExpense ? null : `${$('#f-formonth').value}-01`,
-      category_id: isExpense ? $('#f-category').value : null,
-      pet_id: isExpense ? ($('#f-pet').value || null) : null,
+      lines: isExpense ? parsedLines : null,
+      category_id: isExpense ? parsedLines[0].category_id : null,
+      pet_id: null,   // filled from the lines by db.saveTxn
       paid_to: isExpense ? ($('#f-paidto').value.trim() || null) : null,
       paid_by_member_id: paidBy,
       // Keep a reimbursement only while the same sibling is still the payer.
