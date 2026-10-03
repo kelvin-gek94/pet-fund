@@ -90,13 +90,13 @@ test('inOutByMonth', () => {
   ]);
 });
 
-test('backupReminderDays: only Kelvin, null or > 7 days', () => {
+test('backupReminderDays: only the admin, null or > 7 days', () => {
   const now = new Date('2026-10-10T12:00:00Z');
-  const kelvin = { name: 'Kelvin' };
+  const kelvin = { name: 'Kelvin', role: 'admin' };
   assertEqual(backupReminderDays({ last_backup_at: null }, kelvin, now), Infinity);
   assertEqual(backupReminderDays({ last_backup_at: '2026-10-02T12:00:00Z' }, kelvin, now), 8);
   assertEqual(backupReminderDays({ last_backup_at: '2026-10-04T12:00:00Z' }, kelvin, now), null);
-  assertEqual(backupReminderDays({ last_backup_at: null }, { name: 'Jolyn' }, now), null);
+  assertEqual(backupReminderDays({ last_backup_at: null }, { name: 'Jolyn', role: 'member' }, now), null);
 });
 
 test('runway: no spending yet but below reserve shows 0, not —', () => {

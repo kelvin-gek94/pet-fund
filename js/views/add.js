@@ -5,10 +5,15 @@ import { parseAmount, fromCents } from '../money.js';
 import { todayMY } from '../dates.js';
 import { nextDueAfterPaid, fundMonth, defaultForMonth, forMonthOptions } from '../calc.js';
 import { resizeImage } from '../image.js';
+import { canEditTxn } from '../roles.js';
 import { esc, options, choices, monthLabel } from '../ui.js';
 
 export function render(el, params) {
   const existing = params.id ? state.txns.find(t => t.id === params.id) : null;
+  if (existing && !canEditTxn(existing, state.me)) {
+    el.innerHTML = '<div class="card"><p>You can only change entries you added.</p><p class="muted small">Ask the admin to fix this one.</p></div>';
+    return;
+  }
   const prefill = existing ? null : state.prefill;
   state.prefill = null;
   const t = existing ?? {

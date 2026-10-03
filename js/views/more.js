@@ -5,6 +5,7 @@ import { formatRM, parseAmount, parseBalance, fromCents, sumCents } from '../mon
 import { todayMY, addDays } from '../dates.js';
 import { pendingClaims } from '../calc.js';
 import { APP_VERSION } from '../version.js';
+import { isAdmin } from '../roles.js';
 import { esc, options, openSheet, shortDate, choices } from '../ui.js';
 
 const TABS = { upcoming: 'Upcoming', claims: 'Claims', settings: 'Settings' };
@@ -130,6 +131,7 @@ function renderClaims(body) {
     .sort((a, b) => b.reimbursed_on.localeCompare(a.reimbursed_on));
 
   body.innerHTML = `
+    ${!isAdmin(state.me) && pending.length ? '<p class="muted small">Only the admin marks claims as reimbursed, after paying you back.</p>' : ''}
     ${pending.length ? pending.map(c => {
       const items = live.filter(t => !t.reimbursed_on && t.paid_by_member_id === c.member_id);
       return `<div class="card">
@@ -138,9 +140,9 @@ function renderClaims(body) {
           <li class="row small">
             <span>${shortDate(t.date)} · ${esc(nameOf('categories', t.category_id))}${t.paid_to ? ` · ${esc(t.paid_to)}` : ''}<br>
               <span class="num">${formatRM(t.amount_cents)}</span></span>
-            <button class="btn" data-one="${t.id}">Reimbursed</button>
+            ${isAdmin(state.me) ? `<button class="btn" data-one="${t.id}">Reimbursed</button>` : ''}
           </li>`).join('')}</ul>
-        ${items.length > 1 ? `<button class="btn btn-primary btn-block" data-all="${c.member_id}">Reimbursed all ${formatRM(c.total_cents)}</button>` : ''}
+        ${isAdmin(state.me) && items.length > 1 ? `<button class="btn btn-primary btn-block" data-all="${c.member_id}">Reimbursed all ${formatRM(c.total_cents)}</button>` : ''}
       </div>`;
     }).join('') : '<div class="card muted">Nothing to reimburse. 🎉</div>'}
     ${recent.length ? `<div class="card"><h3>Reimbursed (last 90 days)</h3><ul class="list">${recent.map(t => `
@@ -176,15 +178,16 @@ function renderClaims(body) {
 
 function renderSettings(body) {
   const s = state.settings;
-  const listEditor = (key, title, extra = () => '') => `
+  const admin = isAdmin(state.me);
+  const listEditor = (key, title, extra = () => '', editable = true) => `
     <div class="card" data-list="${key}">
       <h3>${title}</h3>
       <ul class="list">${state[key].map(x => `
         <li class="row">
           <span>${esc(x.name)}${x.active ? '' : ' <span class="tag">hidden</span>'}${extra(x)}</span>
-          <button class="link-btn" data-edit="${x.id}">Edit</button>
+          ${editable ? `<button class="link-btn" data-edit="${x.id}">Edit</button>` : ''}
         </li>`).join('')}</ul>
-      <button class="btn btn-block" data-add>＋ Add</button>
+      ${editable ? '<button class="btn btn-block" data-add>＋ Add</button>' : ''}
     </div>`;
 
   body.innerHTML = `
@@ -192,22 +195,23 @@ function renderSettings(body) {
       <h3>Fund</h3>
       <form data-fund novalidate>
         <div class="field"><label for="s-open">Opening balance (RM)</label>
-          <input id="s-open" inputmode="decimal" value="${fromCents(s.opening_balance_cents ?? 0).toFixed(2)}">
+          <input id="s-open" inputmode="decimal" ${admin ? '' : 'disabled'} value="${fromCents(s.opening_balance_cents ?? 0).toFixed(2)}">
           <p class="muted small">Money already in the fund before you started using this app. Can be negative.</p></div>
         <div class="field"><label for="s-res">Reserve target (RM)</label>
-          <input id="s-res" inputmode="decimal" value="${fromCents(s.reserve_target_cents ?? 0).toFixed(2)}">
+          <input id="s-res" inputmode="decimal" ${admin ? '' : 'disabled'} value="${fromCents(s.reserve_target_cents ?? 0).toFixed(2)}">
           <p class="muted small">Emergency buffer to keep for surprise vet bills.</p></div>
         <div class="error" data-err></div>
-        <button class="btn btn-primary btn-block" type="submit">Save</button>
+        ${admin ? '<button class="btn btn-primary btn-block" type="submit">Save</button>' : '<p class="muted small">Only the admin can change these.</p>'}
       </form>
     </div>
-    <div class="card">
+    ${admin ? `<div class="card">
       <h3>Backup</h3>
       <p class="muted small">Last backup: ${s.last_backup_at ? `${new Date(s.last_backup_at).toLocaleString('en-MY')} by ${esc(nameOf('members', s.last_backup_by, '?'))}` : 'never'}</p>
       <p class="muted small">Save the file into <em>PETS\\Pet Fund Backups</em>.</p>
       <button class="btn btn-block" data-backup>💾 Back up now</button>
-    </div>
-    ${listEditor('members', 'Family members', m => m.email ? `<br><span class="muted small">${esc(m.email)}</span>` : '<br><span class="muted small">no email — cannot sign in</span>')}
+    </div>` : ''}
+    ${listEditor('members', 'Family members', m => (m.role === 'admin' ? ' <span class="tag">admin</span>' : '')
+      + (m.email ? `<br><span class="muted small">${esc(m.email)}</span>` : '<br><span class="muted small">no email — cannot sign in</span>'), admin)}
     <p class="muted small" style="margin:-4px 0 12px">Only active members with a Google email listed here can see the fund. Untick Active to remove someone's access.</p>
     ${listEditor('pets', 'Pets')}
     ${listEditor('categories', 'Categories')}
@@ -225,7 +229,7 @@ function renderSettings(body) {
     if (await guarded(() => db.saveSettings({ opening_balance_cents: opening, reserve_target_cents: reserve }), 'Saved')) renderSettings(body);
   });
 
-  body.querySelector('[data-backup]').addEventListener('click', async e => {
+  body.querySelector('[data-backup]')?.addEventListener('click', async e => {
     e.target.disabled = true;
     const { runBackup } = await import('../backup.js');
     await runBackup();
@@ -238,7 +242,7 @@ function renderSettings(body) {
   body.querySelectorAll('[data-list]').forEach(card => {
     const key = card.dataset.list;
     const edit = row => listItemForm(key, row, savers[key], () => renderSettings(body));
-    card.querySelector('[data-add]').addEventListener('click', () => edit(null));
+    card.querySelector('[data-add]')?.addEventListener('click', () => edit(null));
     card.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => edit(state[key].find(x => x.id === b.dataset.edit))));
   });
 }

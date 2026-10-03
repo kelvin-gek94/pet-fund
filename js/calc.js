@@ -101,11 +101,10 @@ export function inOutByMonth(txns, fromMonth, toMonth) {
   return out;
 }
 
-// Days since the last backup when Kelvin should be reminded (Infinity = never backed up), else null.
-const BACKUP_OWNER = 'Kelvin';
+// Days since the last backup when the admin should be reminded (Infinity = never backed up), else null.
 const BACKUP_EVERY_DAYS = 7;
 export function backupReminderDays(settings, me, now = new Date()) {
-  if (me?.name !== BACKUP_OWNER) return null;
+  if (me?.role !== 'admin') return null;
   if (!settings.last_backup_at) return Infinity;
   const days = Math.floor((now - new Date(settings.last_backup_at)) / 86400000);
   return days > BACKUP_EVERY_DAYS ? days : null;

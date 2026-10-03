@@ -5,6 +5,7 @@ import { formatRM, sumCents } from '../money.js';
 import { todayMY, monthKey } from '../dates.js';
 import { esc, options, openSheet, shortDate, monthLabel } from '../ui.js';
 import { fundMonth } from '../calc.js';
+import { canEditTxn } from '../roles.js';
 
 const filters = { month: null, type: '', pet: '', category: '', person: '', deleted: false };
 
@@ -109,13 +110,16 @@ export function render(el) {
 
   function openActions(id) {
     const t = state.txns.find(x => x.id === id);
+    const mine = canEditTxn(t, state.me);
     const sheet = openSheet(`
       <h3>${esc(label(t))}</h3>
       <p class="muted small">${shortDate(t.date)} · ${formatRM(t.amount_cents)}</p>
       <div class="stack">
-        ${t.deleted_at ? '' : '<button class="btn btn-block" data-a="edit">✏️ Edit</button>'}
+        ${t.deleted_at || !mine ? '' : '<button class="btn btn-block" data-a="edit">✏️ Edit</button>'}
         ${t.receipt_path ? '<button class="btn btn-block" data-a="receipt">🧾 View receipt</button>' : ''}
-        ${t.deleted_at
+        ${!mine ? `<p class="muted small">${t.reimbursed_on ? 'Reimbursed claims can only be changed by the admin.'
+          : 'You can only change entries you added. Ask the admin to fix this one.'}</p>`
+          : t.deleted_at
           ? '<button class="btn btn-block" data-a="restore">↩️ Restore</button>'
           : '<button class="btn btn-block btn-danger" data-a="delete">🗑️ Delete</button>'}
         <button class="btn btn-block" data-a="close">Close</button>
